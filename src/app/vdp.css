@@ -652,6 +652,13 @@ a.vdp-pill--logout:hover {
   flex-shrink: 0;
   padding-top: 1px;
 }
+.vdp-top-products-actions {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
 .vdp-chart-units {
   display: inline-block;
   padding: 3px 8px;

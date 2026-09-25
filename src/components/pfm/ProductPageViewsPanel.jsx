@@ -133,7 +133,7 @@ function productPageHref(pagePath) {
   return `${PFM_SITE_ORIGIN}${path.startsWith('/') ? path : `/${path}`}`;
 }
 
-function TopProductsTable({ rows, scroll }) {
+function TopProductsTable({ rows, scroll, labelMode = 'title' }) {
   if (!rows?.length) {
     return (
       <div style={{ color: 'var(--vdp-muted)', fontSize: 13, padding: 12 }}>
@@ -141,32 +141,36 @@ function TopProductsTable({ rows, scroll }) {
       </div>
     );
   }
+  const showTitle = labelMode === 'title';
   const table = (
     <table className="vdp-table">
       <thead>
         <tr>
-          <th>URL</th>
+          <th>{showTitle ? 'Page title' : 'URL'}</th>
           <th className="right">Views</th>
         </tr>
       </thead>
       <tbody>
         {rows.map((r) => {
           const href = productPageHref(r.pagePath);
+          const label = showTitle
+            ? String(r.pageTitle || '').trim() || r.pagePath
+            : r.pagePath;
           return (
             <tr key={r.pagePath}>
-              <td style={{ wordBreak: 'break-all', fontWeight: 500, lineHeight: 1.3 }}>
+              <td style={{ wordBreak: 'break-word', fontWeight: 500, lineHeight: 1.3 }}>
                 {href ? (
                   <a
                     href={href}
                     target="_blank"
                     rel="noopener noreferrer"
                     className="vdp-product-url"
-                    title={`Open ${href}`}
+                    title={showTitle ? `${label}\n${href}` : `Open ${href}`}
                   >
-                    {r.pagePath}
+                    {label}
                   </a>
                 ) : (
-                  r.pagePath
+                  label
                 )}
               </td>
               <td className="right mono">{fmt(r.views)}</td>
@@ -190,6 +194,20 @@ function TopProductsLimitSelect({ value, onChange }) {
     >
       <option value="5">Top 5</option>
       <option value="all">All</option>
+    </select>
+  );
+}
+
+function TopProductsLabelSelect({ value, onChange }) {
+  return (
+    <select
+      className="vdp-top-vehicles-select"
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      aria-label="Product label mode"
+    >
+      <option value="title">Page titles</option>
+      <option value="url">URL</option>
     </select>
   );
 }
@@ -356,6 +374,7 @@ export default function ProductPageViewsPanel({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [topMode, setTopMode] = useState('5');
+  const [labelMode, setLabelMode] = useState('title');
   const cancelRef = useRef(false);
   const genRef = useRef(0);
 
@@ -595,7 +614,10 @@ export default function ProductPageViewsPanel({
       ? 'All Products by Views'
       : 'Top 5 Products by Views';
   const topActions = (
-    <TopProductsLimitSelect value={topMode} onChange={setTopMode} />
+    <div className="vdp-top-products-actions">
+      <TopProductsLabelSelect value={labelMode} onChange={setLabelMode} />
+      <TopProductsLimitSelect value={topMode} onChange={setTopMode} />
+    </div>
   );
 
   return (
@@ -690,6 +712,7 @@ export default function ProductPageViewsPanel({
               <TopProductsTable
                 rows={displayProducts}
                 scroll={topMode === 'all'}
+                labelMode={labelMode}
               />
             </Card>
             <Card
@@ -700,6 +723,7 @@ export default function ProductPageViewsPanel({
               <TopProductsTable
                 rows={displayProductsPri}
                 scroll={topMode === 'all'}
+                labelMode={labelMode}
               />
             </Card>
           </div>
@@ -784,6 +808,7 @@ export default function ProductPageViewsPanel({
               <TopProductsTable
                 rows={displayProducts}
                 scroll={topMode === 'all'}
+                labelMode={labelMode}
               />
             </Card>
           </div>
