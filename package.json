@@ -1,0 +1,29 @@
+{
+  "name": "pure-for-men-erp",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Pure for Men ERP — cloned from smartanalytics-advance (Supabase credentials to be configured)",
+  "scripts": {
+    "dev": "next dev",
+    "build": "next build",
+    "start": "next start",
+    "lint": "next lint"
+  },
+  "dependencies": {
+    "@supabase/ssr": "^0.5.2",
+    "@supabase/supabase-js": "^2.45.4",
+    "chart.js": "^4.5.1",
+    "exceljs": "^4.4.0",
+    "google-auth-library": "^10.6.2",
+    "next": "^15.5.18",
+    "react": "^19.2.6",
+    "react-dom": "^19.2.6"
+  },
+  "devDependencies": {
+    "autoprefixer": "^10.4.20",
+    "eslint": "^8.57.0",
+    "eslint-config-next": "^15.5.18",
+    "postcss": "^8.4.47",
+    "tailwindcss": "^3.4.13"
+  }
+}

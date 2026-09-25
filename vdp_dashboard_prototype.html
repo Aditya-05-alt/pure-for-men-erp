@@ -1,0 +1,1539 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>VDP & Page View Dashboard — Prototype</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+:root{
+  --bg:#0f172a; --panel:#ffffff; --ink:#0f172a; --muted:#64748b; --border:#e2e8f0;
+  --accent:#2563eb; --accent2:#7c3aed; --good:#16a34a; --bad:#dc2626; --warn:#d97706;
+  --bg-app:#f4f6fb;
+}
+*{box-sizing:border-box;}
+body{margin:0;font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;background:var(--bg-app);color:var(--ink);}
+header.app{background:var(--bg);color:#fff;padding:14px 24px;display:flex;align-items:center;gap:18px;flex-wrap:wrap;position:sticky;top:0;z-index:50;}
+header.app h1{font-size:16px;margin:0;font-weight:600;letter-spacing:.2px;}
+header.app .sub{font-size:12px;color:#93a3b8;margin-top:2px;}
+.titleblock{margin-right:auto;}
+.pill-note{font-size:11px;background:#1e293b;color:#93c5fd;border-radius:20px;padding:4px 10px;border:1px solid #334155;}
+select, .search-input{
+  font-size:13px;padding:7px 10px;border-radius:8px;border:1px solid #334155;background:#1e293b;color:#e2e8f0;
+}
+header.app select{min-width:210px;cursor:pointer;}
+.chip-btn{
+  font-size:12.5px;font-weight:600;padding:7px 12px;border-radius:8px;border:1px solid var(--border);
+  background:#f8fafc;color:var(--ink);
+}
+.chip-btn:hover{background:#eff6ff;border-color:var(--accent);color:var(--accent);}
+.tabs{display:flex;gap:4px;background:#fff;border-bottom:1px solid var(--border);padding:0 24px;position:sticky;top:60px;z-index:40;}
+.tab-btn{padding:12px 16px;font-size:13.5px;font-weight:600;color:var(--muted);background:none;border:none;cursor:pointer;border-bottom:3px solid transparent;}
+.tab-btn.active{color:var(--accent);border-bottom-color:var(--accent);}
+
+/* Two-level nav: a persistent "home" row for the portfolio, and a distinct dealer-context
+   bar (only visible once you've drilled into a specific dealer) so the jump from portfolio
+   to dealer-level tabs reads as "you went somewhere" rather than five flat, equal tabs. */
+.nav-primary{display:flex;align-items:center;gap:10px;background:#fff;border-bottom:1px solid var(--border);padding:0 24px;position:sticky;top:60px;z-index:41;}
+.nav-home-btn{padding:12px 16px;font-size:13.5px;font-weight:700;color:var(--muted);background:none;border:none;cursor:pointer;border-bottom:3px solid transparent;display:flex;align-items:center;gap:6px;}
+.nav-home-btn.active{color:var(--accent);border-bottom-color:var(--accent);}
+.dealer-bar{display:none;align-items:center;gap:10px;background:#eef2ff;border-bottom:1px solid #c7d2fe;padding:8px 24px;position:sticky;top:96px;z-index:39;flex-wrap:wrap;}
+.dealer-bar.show{display:flex;}
+.crumb-sep{color:#818cf8;font-size:14px;}
+.dealer-bar select#clientSelect{font-size:13px;padding:6px 10px;border-radius:7px;border:1px solid #a5b4fc;background:#fff;color:var(--ink);font-weight:700;min-width:200px;cursor:pointer;}
+.back-to-portfolio{font-size:12.5px;font-weight:600;color:#4338ca;background:#fff;border:1px solid #a5b4fc;border-radius:7px;padding:6px 10px;cursor:pointer;white-space:nowrap;}
+.back-to-portfolio:hover{background:#e0e7ff;}
+.tabs-sub{display:flex;gap:2px;margin-left:auto;}
+.tabs-sub .tab-btn{padding:8px 12px;font-size:12.5px;color:#4338ca;border-bottom-width:2px;}
+.tabs-sub .tab-btn.active{color:#312e81;border-bottom-color:#4338ca;font-weight:700;}
+main{padding:20px 24px 60px;max-width:1360px;margin:0 auto;}
+.view{display:none;}
+.view.active{display:block;}
+.toolbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:16px;background:#fff;border:1px solid var(--border);border-radius:12px;padding:12px 14px;}
+.toolbar .grp{display:flex;align-items:center;gap:6px;}
+.toolbar label{font-size:11.5px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.3px;}
+.toolbar select, .toolbar input[type=text]{font-size:13px;padding:6px 9px;border-radius:7px;border:1px solid var(--border);background:#f8fafc;color:var(--ink);}
+.seg{display:flex;border:1px solid var(--border);border-radius:8px;overflow:hidden;}
+.seg button{border:none;background:#f8fafc;padding:6px 12px;font-size:12.5px;cursor:pointer;color:var(--muted);font-weight:600;}
+.seg button.active{background:var(--accent);color:#fff;}
+.chips{display:flex;gap:6px;flex-wrap:wrap;}
+.chip{font-size:12px;padding:5px 10px;border-radius:16px;border:1px solid var(--border);background:#f8fafc;cursor:pointer;color:var(--muted);font-weight:600;}
+.chip.active{background:#eff6ff;border-color:var(--accent);color:var(--accent);}
+.kpi-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin-bottom:18px;}
+.kpi{background:#fff;border:1px solid var(--border);border-radius:12px;padding:16px 18px;}
+.kpi .lbl{font-size:12px;color:var(--muted);font-weight:600;text-transform:uppercase;letter-spacing:.3px;}
+.kpi .val{font-size:26px;font-weight:700;margin:6px 0 4px;}
+.kpi .delta{font-size:12.5px;font-weight:600;}
+.delta.up{color:var(--good);} .delta.down{color:var(--bad);} .delta.flat{color:var(--muted);}
+.grid-2{display:grid;grid-template-columns:2fr 1fr;gap:14px;margin-bottom:16px;}
+.card{background:#fff;border:1px solid var(--border);border-radius:12px;padding:16px 18px;}
+.card h3{font-size:14px;margin:0 0 2px;}
+.card .cardsub{font-size:12px;color:var(--muted);margin-bottom:10px;}
+table{width:100%;border-collapse:collapse;font-size:12.8px;}
+th{text-align:left;color:var(--muted);font-weight:600;font-size:11.5px;text-transform:uppercase;letter-spacing:.2px;padding:8px 10px;border-bottom:1px solid var(--border);cursor:pointer;white-space:nowrap;}
+th:hover{color:var(--accent);}
+th.sorted{color:var(--accent);}
+td{padding:8px 10px;border-bottom:1px solid #f1f5f9;white-space:nowrap;}
+tr:hover td{background:#f8fafc;}
+#pfTable tbody tr{cursor:pointer;}
+#pfTable tbody tr:hover td{background:#eff6ff;}
+.dealer-name{font-weight:700;}
+.dealer-name .vert-tag{font-weight:600;color:var(--muted);font-size:11px;margin-left:6px;}
+.tag{font-size:10.5px;font-weight:700;padding:2px 7px;border-radius:5px;text-transform:uppercase;}
+.tag.new{background:#dcfce7;color:#166534;} .tag.used{background:#e0e7ff;color:#3730a3;}
+.right{text-align:right;}
+.mono{font-variant-numeric:tabular-nums;}
+.footer-note{font-size:11.5px;color:var(--muted);margin-top:26px;line-height:1.6;border-top:1px solid var(--border);padding-top:14px;}
+canvas{max-height:320px;}
+.pager{display:flex;justify-content:space-between;align-items:center;margin-top:10px;font-size:12px;color:var(--muted);}
+.pager button{border:1px solid var(--border);background:#fff;border-radius:6px;padding:4px 10px;cursor:pointer;font-size:12px;}
+.pager button:disabled{opacity:.4;cursor:default;}
+.legend-swatch{display:inline-block;width:9px;height:9px;border-radius:2px;margin-right:5px;}
+@media (max-width:980px){.kpi-grid{grid-template-columns:repeat(2,1fr);} .grid-2{grid-template-columns:1fr;}}
+
+/* Login screen */
+.login-screen{min-height:100vh;display:flex;align-items:center;justify-content:center;background:linear-gradient(160deg,#0f172a,#1e293b);padding:20px;}
+.login-card{background:#fff;border-radius:16px;padding:34px 32px;max-width:380px;width:100%;box-shadow:0 20px 60px rgba(0,0,0,.35);}
+.login-card h1{font-size:18px;margin:0 0 4px;}
+.login-card .sub{font-size:12.5px;color:var(--muted);margin-bottom:22px;}
+.login-field{margin-bottom:14px;}
+.login-field label{display:block;font-size:11.5px;font-weight:700;color:var(--muted);text-transform:uppercase;letter-spacing:.3px;margin-bottom:5px;}
+.login-field input{width:100%;font-size:14px;padding:9px 11px;border-radius:8px;border:1px solid var(--border);background:#f8fafc;color:var(--ink);}
+.login-error{font-size:12.5px;color:var(--bad);font-weight:600;min-height:16px;margin-bottom:6px;}
+.login-btn{width:100%;background:var(--accent);color:#fff;border:none;border-radius:8px;padding:11px;font-size:14px;font-weight:700;cursor:pointer;margin-top:4px;}
+.login-btn:hover{background:#1d4ed8;}
+.login-demo{margin-top:20px;padding-top:16px;border-top:1px solid var(--border);font-size:11.5px;color:var(--muted);line-height:1.7;}
+.login-demo strong{color:var(--ink);}
+.login-demo .demo-row{display:flex;justify-content:space-between;gap:8px;cursor:pointer;padding:3px 0;}
+.login-demo .demo-row:hover{color:var(--accent);}
+#appRoot{display:none;}
+</style>
+</head>
+<body>
+
+<div class="login-screen" id="loginScreen">
+  <div class="login-card">
+    <h1>VDP &amp; Page View Performance</h1>
+    <div class="sub">Dealer Reporting Portal — sign in to continue</div>
+    <div class="login-field"><label>Username</label><input id="loginUsername" type="text" autocomplete="username"></div>
+    <div class="login-field"><label>Password</label><input id="loginPassword" type="password" autocomplete="current-password"></div>
+    <div class="login-error" id="loginError"></div>
+    <button class="login-btn" id="loginBtn">Log In</button>
+    <div class="login-demo">
+      <strong>Demo accounts</strong> (prototype only — click a row to autofill, not secure, resets on reload):
+      <div id="loginDemoList"></div>
+    </div>
+  </div>
+</div>
+
+<div id="appRoot">
+
+<header class="app">
+  <div class="titleblock">
+    <h1>VDP &amp; Page View Performance</h1>
+    <div class="sub">Prototype dashboard · mock data, seeded for consistency</div>
+  </div>
+  <span class="pill-note" id="asOfNote"></span>
+  <span class="pill-note" id="whoAmI"></span>
+  <button class="chip-btn" id="logoutBtn">Log Out</button>
+</header>
+
+<nav class="nav-primary" id="navPrimary">
+  <button class="nav-home-btn active" data-view="portfolio">🏢 All Dealers</button>
+  <button class="nav-home-btn" data-view="users">👤 User Management</button>
+</nav>
+
+<div class="dealer-bar" id="dealerBar">
+  <button class="back-to-portfolio" id="backToPortfolio">← All Dealers</button>
+  <span class="crumb-sep">/</span>
+  <select id="clientSelect"></select>
+  <nav class="tabs-sub">
+    <button class="tab-btn" data-view="overview">Overview</button>
+    <button class="tab-btn" data-view="traffic">Traffic by Source</button>
+    <button class="tab-btn" data-view="inventory">Inventory Performance</button>
+    <button class="tab-btn" data-view="admin">Admin: Source Mapping</button>
+  </nav>
+</div>
+
+<main>
+
+  <!-- ===================== ALL DEALERS (PORTFOLIO) ===================== -->
+  <section class="view active" id="view-portfolio">
+    <div class="toolbar">
+      <div class="grp">
+        <label>Comparison</label>
+        <div class="seg" id="pfCompareSeg">
+          <button data-mode="mtd" class="active">MTD vs Last Month (same dates)</button>
+          <button data-mode="mom">Full Last Month vs Prior Month</button>
+        </div>
+      </div>
+      <div class="grp"><label>Metric</label>
+        <div class="seg" id="pfMetricSeg">
+          <button data-metric="page" class="active">Page Views</button>
+          <button data-metric="vdp">VDP Views</button>
+        </div>
+      </div>
+      <div class="grp"><label>Channel</label><select id="pfChannelFilter"></select></div>
+    </div>
+
+    <div class="kpi-grid" id="pfKpis"></div>
+
+    <div class="card" style="margin-bottom:16px;">
+      <h3 id="pfChartTitle">Page Views by Dealer</h3>
+      <div class="cardsub" id="pfChartSub"></div>
+      <canvas id="pfBarChart" height="110"></canvas>
+    </div>
+
+    <div class="card" style="margin-bottom:16px;overflow-x:auto;">
+      <h3>Channel Breakdown by Dealer</h3>
+      <div class="cardsub" id="pfGridSub">Every channel at once — no filter needed. Click a dealer to open it.</div>
+      <table id="pfChannelGrid">
+        <thead><tr id="pfGridHead"></tr></thead>
+        <tbody id="pfGridBody"></tbody>
+      </table>
+    </div>
+
+    <div class="card">
+      <h3>All Dealers <span style="color:var(--muted);font-weight:400;font-size:12px;">— click a row to open that dealer</span></h3>
+      <div class="cardsub" id="pfTableSub"></div>
+      <table id="pfTable">
+        <thead><tr>
+          <th data-k="name">Dealer</th>
+          <th data-k="vertical">Vertical</th>
+          <th data-k="pv1" class="right">Page Views (Current)</th>
+          <th data-k="pv0" class="right">Page Views (Prior)</th>
+          <th data-k="pvmom" class="right">MoM %</th>
+          <th data-k="vdp1" class="right">VDP Views (Current)</th>
+          <th data-k="vdp0" class="right">VDP Views (Prior)</th>
+          <th data-k="vdpmom" class="right">MoM %</th>
+          <th data-k="rate" class="right">VDP Rate</th>
+        </tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ===================== OVERVIEW ===================== -->
+  <section class="view" id="view-overview">
+    <div class="toolbar">
+      <div class="grp">
+        <label>Comparison</label>
+        <div class="seg" id="ovCompareSeg">
+          <button data-mode="mtd" class="active">MTD vs Last Month (same dates)</button>
+          <button data-mode="mom">Full Last Month vs Prior Month</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="kpi-grid" id="ovKpis"></div>
+
+    <div class="grid-2">
+      <div class="card">
+        <h3 id="ovLineTitle">Cumulative Page Views — Month to Date</h3>
+        <div class="cardsub" id="ovLineSub">Day-by-day running total, this month vs. same days last month</div>
+        <canvas id="ovLineChart" height="130"></canvas>
+      </div>
+      <div class="card">
+        <h3>Top 5 Vehicles by VDP Views</h3>
+        <div class="cardsub">Current comparison period</div>
+        <table id="ovTopVehicles"><thead><tr><th>Vehicle</th><th class="right">VDP</th><th class="right">MoM</th></tr></thead><tbody></tbody></table>
+      </div>
+    </div>
+
+    <div class="grid-2">
+      <div class="card">
+        <h3>Views by Source</h3>
+        <div class="cardsub">Page views &amp; VDP views, current comparison period</div>
+        <canvas id="ovSourceChart" height="140"></canvas>
+      </div>
+      <div class="card">
+        <h3>New vs. Used — VDP Share</h3>
+        <div class="cardsub">Current comparison period</div>
+        <canvas id="ovNewUsedChart" height="140"></canvas>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== TRAFFIC BY SOURCE ===================== -->
+  <section class="view" id="view-traffic">
+    <div class="toolbar">
+      <div class="grp">
+        <label>Comparison</label>
+        <div class="seg" id="trCompareSeg">
+          <button data-mode="mtd" class="active">MTD vs Last Month (same dates)</button>
+          <button data-mode="mom">Full Last Month vs Prior Month</button>
+        </div>
+      </div>
+      <div class="grp"><label>Metric</label>
+        <div class="seg" id="trMetricSeg">
+          <button data-metric="page" class="active">Page Views</button>
+          <button data-metric="vdp">VDP Views</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="card" style="margin-bottom:16px;">
+      <h3>Views by Source — This Period vs. Comparable Period</h3>
+      <div class="cardsub" id="trBarSub"></div>
+      <canvas id="trBarChart" height="110"></canvas>
+    </div>
+
+    <div class="card">
+      <h3>Source Detail</h3>
+      <div class="cardsub">Click a column header to sort</div>
+      <table id="trTable">
+        <thead><tr>
+          <th data-k="source">Source</th>
+          <th data-k="pv1" class="right">Page Views (Current)</th>
+          <th data-k="pv0" class="right">Page Views (Prior)</th>
+          <th data-k="pvmom" class="right">MoM %</th>
+          <th data-k="vdp1" class="right">VDP Views (Current)</th>
+          <th data-k="vdp0" class="right">VDP Views (Prior)</th>
+          <th data-k="vdpmom" class="right">MoM %</th>
+          <th data-k="rate" class="right">VDP Rate</th>
+        </tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ===================== INVENTORY PERFORMANCE ===================== -->
+  <section class="view" id="view-inventory">
+    <div class="toolbar">
+      <div class="grp">
+        <label>Comparison</label>
+        <div class="seg" id="invCompareSeg">
+          <button data-mode="mtd" class="active">MTD vs Last Month (same dates)</button>
+          <button data-mode="mom">Full Last Month vs Prior Month</button>
+        </div>
+      </div>
+      <div class="grp"><label>Make</label><select id="invMakeFilter"></select></div>
+      <div class="grp"><label>Condition</label>
+        <div class="seg" id="invCondSeg">
+          <button data-cond="all" class="active">All</button>
+          <button data-cond="New">New</button>
+          <button data-cond="Used">Used</button>
+        </div>
+      </div>
+      <div class="grp"><label>Category</label><select id="invCatFilter"></select></div>
+      <div class="grp"><label>Search</label><input type="text" id="invSearch" class="search-input" placeholder="Stock #, model..."></div>
+    </div>
+
+    <div class="kpi-grid" id="invKpis"></div>
+
+    <div class="grid-2">
+      <div class="card">
+        <h3>VDP Views by Make</h3>
+        <div class="cardsub">New vs. Used, current comparison period</div>
+        <canvas id="invMakeChart" height="130"></canvas>
+      </div>
+      <div class="card">
+        <h3>VDP Views by Category</h3>
+        <div class="cardsub">Current comparison period</div>
+        <canvas id="invCatChart" height="130"></canvas>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>Inventory Detail <span id="invCount" style="color:var(--muted);font-weight:400;font-size:12px;"></span></h3>
+      <div class="cardsub">Click a column header to sort. VDP = total views, Unique = unique visitors.</div>
+      <table id="invTable">
+        <thead><tr>
+          <th data-k="stock">Stock #</th>
+          <th data-k="make">Make</th>
+          <th data-k="model">Model</th>
+          <th data-k="year">Year</th>
+          <th data-k="condition">Cond.</th>
+          <th data-k="category">Category</th>
+          <th data-k="vdp1" class="right">VDP (Current)</th>
+          <th data-k="vdp0" class="right">VDP (Prior)</th>
+          <th data-k="vdpmom" class="right">MoM %</th>
+          <th data-k="uniq1" class="right">Unique VDP</th>
+        </tr></thead>
+        <tbody></tbody>
+      </table>
+      <div class="pager">
+        <span id="invPageInfo"></span>
+        <div>
+          <button id="invPrev">← Prev</button>
+          <button id="invNext">Next →</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <!-- ===================== ADMIN: SOURCE MAPPING ===================== -->
+  <section class="view" id="view-admin">
+    <div class="card" style="margin-bottom:16px;">
+      <h3>How this works</h3>
+      <div class="cardsub" style="margin-bottom:0;">
+        GA4 (and other tools) report traffic as raw <code>source / medium</code> pairs — <code>google / organic</code>, <code>facebook / paid</code>,
+        <code>autotrader.com / referral</code>, and so on — which is usually too granular to report on directly. Below, map each raw source into a
+        clean channel (the buckets used on the Traffic and Overview tabs). Renaming, merging, or reassigning here updates those tabs immediately.
+        This mapping is shared across all clients; the view counts shown below are for whichever client is selected up top, for context only.
+      </div>
+    </div>
+
+    <div class="grid-2" style="grid-template-columns:1fr 1fr;">
+      <div class="card">
+        <h3>Channels</h3>
+        <div class="cardsub">Rename, merge, or delete. "Unmapped" catches anything not yet assigned.</div>
+        <table id="adminChannelTable">
+          <thead><tr><th>Channel</th><th class="right">Raw Sources</th><th class="right">Page Views (MTD)</th><th></th></tr></thead>
+          <tbody></tbody>
+        </table>
+        <div style="margin-top:12px;display:flex;gap:8px;">
+          <button class="chip-btn" id="adminAddChannel" style="cursor:pointer;">+ Add Channel</button>
+          <button class="chip-btn" id="adminResetMapping" style="cursor:pointer;">Reset to Default Mapping</button>
+        </div>
+      </div>
+      <div class="card">
+        <h3>Live Preview — Channel Totals</h3>
+        <div class="cardsub">Month-to-date, current client. This is exactly what the Traffic tab will show.</div>
+        <table id="adminPreviewTable">
+          <thead><tr><th>Channel</th><th class="right">Page Views</th><th class="right">VDP Views</th><th class="right">VDP Rate</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3>Raw Sources <span id="adminRawCount" style="color:var(--muted);font-weight:400;font-size:12px;"></span></h3>
+      <div class="cardsub">Select rows to bulk-assign, or change a single row's channel from its dropdown.</div>
+      <div class="toolbar" style="margin-bottom:12px;">
+        <div class="grp"><label>Search</label><input type="text" id="adminSearch" class="search-input" placeholder="source, medium..."></div>
+        <div class="grp" id="adminBulkBar" style="display:none;">
+          <label id="adminSelCount">0 selected</label>
+          <select id="adminBulkTarget"></select>
+          <button class="chip-btn" id="adminBulkApply" style="cursor:pointer;">Assign</button>
+          <button class="chip-btn" id="adminBulkClear" style="cursor:pointer;">Clear</button>
+        </div>
+      </div>
+      <table id="adminRawTable">
+        <thead><tr>
+          <th><input type="checkbox" id="adminSelectAll"></th>
+          <th>Raw Source</th><th>Raw Medium</th>
+          <th class="right">Page Views (MTD)</th><th class="right">VDP Views (MTD)</th>
+          <th>Mapped Channel</th>
+        </tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </section>
+
+  <!-- ===================== USER MANAGEMENT (AGENCY ONLY) ===================== -->
+  <section class="view" id="view-users">
+    <div class="card" style="margin-bottom:16px;">
+      <h3>⚠️ Prototype only — not secure</h3>
+      <div class="cardsub" style="margin-bottom:0;">
+        This login system runs entirely in this browser tab: usernames/passwords live in memory, aren't hashed, and reset
+        every time the page reloads. It's here so you can design the account/role structure and click through the dealer
+        experience. Before giving real dealers real logins, this needs a real backend — server-side auth, hashed
+        passwords, sessions, and API-enforced per-dealer data access (a dealer viewing "their" page must be impossible to
+        bypass by editing the page, which is not true today).
+      </div>
+    </div>
+
+    <div class="grid-2" style="grid-template-columns:1.3fr 1fr;">
+      <div class="card">
+        <h3>Accounts</h3>
+        <div class="cardsub">Dealers log in and land straight on their own Overview tab — no portfolio, no admin, no dealer switcher.</div>
+        <table id="userTable">
+          <thead><tr><th>Display Name</th><th>Username</th><th>Password</th><th>Role</th><th>Dealer</th><th></th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <div class="card">
+        <h3>Create Login</h3>
+        <div class="cardsub">Add an account for a dealer contact, or another agency teammate.</div>
+        <div class="login-field"><label>Display Name</label><input type="text" id="newUserName" placeholder="e.g. Sunset RV Manager"></div>
+        <div class="login-field"><label>Username</label><input type="text" id="newUserUsername" placeholder="e.g. sunsetrv"></div>
+        <div class="login-field"><label>Password</label><input type="text" id="newUserPassword" placeholder="e.g. demo123"></div>
+        <div class="login-field"><label>Role</label>
+          <select id="newUserRole" style="width:100%;font-size:14px;padding:9px 11px;border-radius:8px;border:1px solid var(--border);background:#f8fafc;">
+            <option value="dealer">Dealer (single dealer, view-only)</option>
+            <option value="agency">Agency (full access, all dealers)</option>
+          </select>
+        </div>
+        <div class="login-field" id="newUserDealerField"><label>Dealer</label><select id="newUserDealer" style="width:100%;font-size:14px;padding:9px 11px;border-radius:8px;border:1px solid var(--border);background:#f8fafc;"></select></div>
+        <div class="login-error" id="newUserError"></div>
+        <button class="login-btn" id="newUserCreate" style="margin-top:6px;">Create Login</button>
+      </div>
+    </div>
+  </section>
+
+  <div class="footer-note">
+    Prototype dashboard built with seeded mock data (deterministic — same numbers on every reload) so the layout, filters, and comparisons can be reviewed and adjusted before wiring in real GA4 / DMS / inventory feed data. Swap the <code>generate...()</code> functions near the top of the script for real API calls or CSV imports to go live. "MTD vs Last Month (same dates)" compares Jul 1–29 to Jun 1–29; "Full Last Month vs Prior Month" compares full June to full May.
+  </div>
+
+</main>
+
+</div><!-- /appRoot -->
+
+<script>
+/* =========================================================================
+   1. CONFIG — swap this section for real data later
+   ========================================================================= */
+// Pinned to a fixed date so the seeded mock data always produces the same numbers on reload.
+// When wiring in real data, change this to `new Date()` — every date range, label, and period
+// comparison below (PERIODS, TREND_DATES, VEH_DATES) is computed FROM this value, nothing is
+// separately hardcoded. See INTEGRATION_GUIDE.md for the rest of the handoff.
+const TODAY = new Date('2026-07-29T00:00:00');
+const DAY_OF_MONTH = TODAY.getDate(); // 29
+
+// Raw source/medium combos, as they'd arrive from GA4 before any channel grouping is applied.
+// Weights sum to 1 and roughly mirror the old 7-bucket split so defaults look familiar.
+const RAW_SOURCES = [
+  { id:'google-organic',      rawSource:'google',          rawMedium:'organic',  weight:0.220, vdpRate:0.43 },
+  { id:'bing-organic',        rawSource:'bing',            rawMedium:'organic',  weight:0.050, vdpRate:0.40 },
+  { id:'yahoo-organic',       rawSource:'yahoo',           rawMedium:'organic',  weight:0.030, vdpRate:0.38 },
+  { id:'direct-none',         rawSource:'(direct)',        rawMedium:'(none)',   weight:0.200, vdpRate:0.55 },
+  { id:'google-cpc',          rawSource:'google',          rawMedium:'cpc',      weight:0.130, vdpRate:0.50 },
+  { id:'bing-cpc',            rawSource:'bing',            rawMedium:'cpc',      weight:0.050, vdpRate:0.44 },
+  { id:'facebook-paid',       rawSource:'facebook',        rawMedium:'paid',     weight:0.080, vdpRate:0.29 },
+  { id:'instagram-paid',      rawSource:'instagram',       rawMedium:'paid',     weight:0.045, vdpRate:0.27 },
+  { id:'tiktok-paid',         rawSource:'tiktok',          rawMedium:'paid',     weight:0.015, vdpRate:0.22 },
+  { id:'facebook-organic',    rawSource:'facebook',        rawMedium:'organic',  weight:0.045, vdpRate:0.26 },
+  { id:'instagram-organic',   rawSource:'instagram',       rawMedium:'organic',  weight:0.035, vdpRate:0.24 },
+  { id:'autotrader-referral', rawSource:'autotrader.com',  rawMedium:'referral', weight:0.025, vdpRate:0.37 },
+  { id:'cars-referral',       rawSource:'cars.com',        rawMedium:'referral', weight:0.020, vdpRate:0.35 },
+  { id:'cargurus-referral',   rawSource:'cargurus.com',    rawMedium:'referral', weight:0.015, vdpRate:0.33 },
+  { id:'newsletter-email',    rawSource:'newsletter',      rawMedium:'email',    weight:0.025, vdpRate:0.62 },
+  { id:'klaviyo-email',       rawSource:'klaviyo',         rawMedium:'email',    weight:0.015, vdpRate:0.58 },
+];
+
+const CHANNEL_PALETTE = ['#2563eb','#16a34a','#d97706','#dc2626','#7c3aed','#0891b2','#db2777','#65a30d','#0d9488','#ca8a04','#4f46e5','#e11d48'];
+
+function defaultChannels(){
+  return [
+    { id:'organic-search', name:'Organic Search', color:'#2563eb' },
+    { id:'direct',          name:'Direct',          color:'#16a34a' },
+    { id:'paid-search',     name:'Paid Search',     color:'#d97706' },
+    { id:'paid-social',     name:'Paid Social',     color:'#dc2626' },
+    { id:'organic-social',  name:'Organic Social',  color:'#7c3aed' },
+    { id:'referral',        name:'Referral',        color:'#0891b2' },
+    { id:'email',           name:'Email',           color:'#db2777' },
+    { id:'unmapped',        name:'Unmapped',        color:'#94a3b8' },
+  ];
+}
+function defaultMapping(){
+  return {
+    'google-organic':'organic-search', 'bing-organic':'organic-search', 'yahoo-organic':'organic-search',
+    'direct-none':'direct',
+    'google-cpc':'paid-search', 'bing-cpc':'paid-search',
+    'facebook-paid':'paid-social', 'instagram-paid':'paid-social', 'tiktok-paid':'paid-social',
+    'facebook-organic':'organic-social', 'instagram-organic':'organic-social',
+    'autotrader-referral':'referral', 'cars-referral':'referral', 'cargurus-referral':'referral',
+    'newsletter-email':'email', 'klaviyo-email':'email',
+  };
+}
+
+const CLIENTS = [
+  {
+    id:'sunset-rv', name:'Sunset RV & Marine', vertical:'RV',
+    baseDaily: 1300, seasonality:[0.70,0.80,0.95,1.10,1.25,1.30], // Feb..Jul
+    categories:['Travel Trailer','Fifth Wheel','Class A Motorhome','Class C Motorhome','Toy Hauler'],
+    makes:{
+      'Forest River':['Cherokee','Wildwood','Rockwood','Sandstorm'],
+      'Keystone':['Cougar','Montana','Bullet','Passport'],
+      'Thor Motor Coach':['Four Winds','Ace','Freedom Elite'],
+      'Jayco':['Jay Flight','Eagle','White Hawk'],
+      'Grand Design':['Reflection','Imagine','Momentum'],
+    },
+    inventoryCount: 46,
+  },
+  {
+    id:'big-sky-powersports', name:'Big Sky Powersports', vertical:'Powersports',
+    baseDaily: 900, seasonality:[0.65,0.78,1.00,1.20,1.30,1.28],
+    categories:['ATV','UTV / Side-by-Side','Snowmobile','Motorcycle','Utility'],
+    makes:{
+      'Polaris':['RZR','Ranger','Sportsman','Indy'],
+      'Can-Am':['Maverick X3','Defender','Outlander','Ryker'],
+      'Yamaha':['YXZ1000R','Wolverine','Grizzly','MT-07'],
+      'Kawasaki':['Mule','Teryx','KX450','Ninja 400'],
+      'Honda':['Talon','Pioneer','Rubicon','CRF450'],
+    },
+    inventoryCount: 38,
+  },
+  {
+    id:'metro-auto', name:'Metro Auto Group', vertical:'Auto',
+    baseDaily: 2600, seasonality:[0.95,1.00,1.00,1.05,1.05,1.10],
+    categories:['Sedan','SUV','Truck','Crossover'],
+    makes:{
+      'Toyota':['RAV4','Camry','Tacoma','Highlander'],
+      'Ford':['F-150','Explorer','Escape','Bronco'],
+      'Honda':['CR-V','Civic','Accord','Pilot'],
+      'Chevrolet':['Silverado','Equinox','Traverse','Malibu'],
+      'Jeep':['Grand Cherokee','Wrangler','Compass','Gladiator'],
+    },
+    inventoryCount: 58,
+  },
+];
+
+// Mock login accounts. PROTOTYPE ONLY — plaintext, in-memory, resets on reload.
+// role 'agency' = full access, sees every dealer + Admin + User Management.
+// role 'dealer' = locked to one clientId, sees only Overview/Traffic/Inventory for that dealer.
+function defaultUsers(){
+  return [
+    { username:'agency',    password:'agency123', role:'agency', clientId:null,                  displayName:'Kiran' },
+    { username:'sunsetrv',  password:'dealer123', role:'dealer', clientId:'sunset-rv',            displayName:'Sunset RV & Marine' },
+    { username:'bigsky',    password:'dealer123', role:'dealer', clientId:'big-sky-powersports',  displayName:'Big Sky Powersports' },
+    { username:'metroauto', password:'dealer123', role:'dealer', clientId:'metro-auto',           displayName:'Metro Auto Group' },
+  ];
+}
+
+/* =========================================================================
+   2. SEEDED RNG + DATE HELPERS
+   ========================================================================= */
+function mulberry32(seed){
+  return function(){
+    seed |= 0; seed = (seed + 0x6D2B79F5) | 0;
+    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+function dateISO(d){
+  // Local-date formatting (not toISOString(), which converts to UTC first and can shift the
+  // date by a day in timezones on the other side of midnight from UTC).
+  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+}
+function addDays(d,n){ const r=new Date(d); r.setDate(r.getDate()+n); return r; }
+function daysBetween(a,b){ return Math.round((b-a)/86400000); }
+function monthLabel(iso){ return new Date(iso+'T00:00:00').toLocaleDateString('en-US',{month:'short',day:'numeric'}); }
+function fmt(n){ return Math.round(n).toLocaleString('en-US'); }
+function pct(n){ return (n>=0?'+':'') + n.toFixed(1) + '%'; }
+function momClass(n){ return n>0.05?'up': n<-0.05?'down':'flat'; }
+function safeDiv(a,b){ return b===0?0:a/b; }
+
+// Site trend range: 1st of the month, 5 calendar months back through TODAY (6 months, current
+// month partial). Relative to TODAY rather than a fixed date so this keeps working after TODAY
+// is changed to a real "now".
+const TREND_START = new Date(TODAY.getFullYear(), TODAY.getMonth()-5, 1);
+const TREND_DAYS = daysBetween(TREND_START, TODAY) + 1;
+const TREND_DATES = Array.from({length:TREND_DAYS}, (_,i)=>dateISO(addDays(TREND_START,i)));
+
+// Vehicle-level range: 1st of the month, 2 calendar months back through TODAY (covers the
+// prior-prior full month, prior full month, and this month's MTD).
+const VEH_START = new Date(TODAY.getFullYear(), TODAY.getMonth()-2, 1);
+const VEH_DAYS = daysBetween(VEH_START, TODAY) + 1;
+const VEH_DATES = Array.from({length:VEH_DAYS}, (_,i)=>dateISO(addDays(VEH_START,i)));
+
+// Period windows used everywhere — computed from TODAY so this keeps working on any date once
+// real data is wired in. Nothing here is hardcoded; change TODAY (e.g. to `new Date()`) and
+// every label/range below recalculates.
+function monShort(d){ return d.toLocaleDateString('en-US',{month:'short'}); }
+function buildPeriods(today){
+  const dom = today.getDate();
+  const curMonthStart  = new Date(today.getFullYear(), today.getMonth(), 1);
+  const prevMonthStart = new Date(today.getFullYear(), today.getMonth()-1, 1);
+  const prevMonthEnd   = new Date(today.getFullYear(), today.getMonth(), 0);   // last day of prior month
+  const twoAgoStart    = new Date(today.getFullYear(), today.getMonth()-2, 1);
+  const twoAgoEnd      = new Date(today.getFullYear(), today.getMonth()-1, 0); // last day of two months ago
+  const priSameDateDay = Math.min(dom, prevMonthEnd.getDate()); // cap if prior month is shorter (e.g. today=Mar 31)
+  const priSameDate    = new Date(prevMonthStart.getFullYear(), prevMonthStart.getMonth(), priSameDateDay);
+  return {
+    mtd: {
+      curLabel:`${monShort(curMonthStart)} 1–${dom}`,           curFrom:dateISO(curMonthStart),  curTo:dateISO(today),
+      priLabel:`${monShort(prevMonthStart)} 1–${priSameDateDay}`, priFrom:dateISO(prevMonthStart), priTo:dateISO(priSameDate),
+      name:'Month-to-Date vs. Last Month (same dates)'
+    },
+    mom: {
+      curLabel:`${monShort(prevMonthStart)} (full)`, curFrom:dateISO(prevMonthStart), curTo:dateISO(prevMonthEnd),
+      priLabel:`${monShort(twoAgoStart)} (full)`,     priFrom:dateISO(twoAgoStart),    priTo:dateISO(twoAgoEnd),
+      name:'Full Last Month vs. Prior Full Month'
+    }
+  };
+}
+const PERIODS = buildPeriods(TODAY);
+
+function sumRange(dateList, values, fromISO, toISO){
+  let s=0;
+  for(let i=0;i<dateList.length;i++){ if(dateList[i]>=fromISO && dateList[i]<=toISO) s+=values[i]; }
+  return s;
+}
+
+/* =========================================================================
+   3. DATA GENERATION
+   ========================================================================= */
+function seasonalFactor(client, iso){
+  const m = new Date(iso+'T00:00:00').getMonth(); // 0=Jan
+  const idx = m - 1; // Feb=0
+  if(idx<0 || idx>=client.seasonality.length) return client.seasonality[0];
+  return client.seasonality[idx];
+}
+function dowFactor(iso){
+  const dow = new Date(iso+'T00:00:00').getDay();
+  return (dow===0||dow===6) ? 1.15 : 1.0;
+}
+
+function generateRawDaily(client, rand){
+  // returns { [rawSourceId]: { page:[...], vdp:[...] } } aligned to TREND_DATES — this is the "as GA4 reports it" layer.
+  const out = {};
+  RAW_SOURCES.forEach(src=>{
+    out[src.id] = { page: new Array(TREND_DATES.length), vdp: new Array(TREND_DATES.length) };
+  });
+  TREND_DATES.forEach((iso, i)=>{
+    const seas = seasonalFactor(client, iso) * dowFactor(iso);
+    const totalPV = client.baseDaily * seas;
+    RAW_SOURCES.forEach(src=>{
+      const noise = 0.85 + rand()*0.3;
+      const pv = totalPV * src.weight * noise;
+      const vdpNoise = 0.85 + rand()*0.3;
+      const vdp = pv * src.vdpRate * vdpNoise;
+      out[src.id].page[i] = pv;
+      out[src.id].vdp[i] = vdp;
+    });
+  });
+  return out;
+}
+
+function pickWeighted(rand, n){
+  // returns an index 0..n-1 with mild long-tail skew
+  const r = rand();
+  return Math.floor(Math.pow(r, 1.6) * n) % n;
+}
+
+function generateInventory(client, rand){
+  const makeNames = Object.keys(client.makes);
+  const items = [];
+  let stockSeed = 10000 + Math.floor(rand()*900);
+  for(let i=0;i<client.inventoryCount;i++){
+    const make = makeNames[Math.floor(rand()*makeNames.length)];
+    const models = client.makes[make];
+    const model = models[Math.floor(rand()*models.length)];
+    const year = 2024 + Math.floor(rand()*3); // 2024-2026
+    const condition = rand() < 0.55 ? 'New' : 'Used';
+    const category = client.categories[Math.floor(rand()*client.categories.length)];
+    const stock = client.id.slice(0,3).toUpperCase() + '-' + (stockSeed + i*3 + Math.floor(rand()*3));
+    // popularity: log-normal-ish long tail so a few vehicles are "hot"
+    const popularity = Math.pow(rand(), 2.1) * 0.9 + 0.08;
+    const uniqueRate = 0.55 + rand()*0.22;
+    items.push({ stock, make, model, year, condition, category, popularity, uniqueRate });
+  }
+  // daily VDP series per vehicle, scaled so aggregate roughly tracks client size
+  const dailyPoolBase = client.baseDaily * 0.40; // rough VDP share of pageviews site-wide
+  const totalPop = items.reduce((s,v)=>s+v.popularity,0);
+  items.forEach(v=>{
+    v.daily = new Array(VEH_DATES.length);
+    const share = v.popularity / totalPop;
+    VEH_DATES.forEach((iso,i)=>{
+      const seas = seasonalFactor(client, iso) * dowFactor(iso);
+      const expected = dailyPoolBase * seas * share; // share is fractional and sums to 1 across all vehicles
+      const noise = 0.6 + rand()*0.8;
+      v.daily[i] = Math.max(0, expected * noise);
+    });
+  });
+  return items;
+}
+
+const DATASET = {};
+CLIENTS.forEach((client, ci)=>{
+  const rand = mulberry32(1000 + ci*777);
+  DATASET[client.id] = {
+    client,
+    rawDaily: generateRawDaily(client, rand),
+    inventory: generateInventory(client, rand),
+  };
+});
+
+/* =========================================================================
+   4. AGGREGATION HELPERS
+   ========================================================================= */
+function sourceTotals(clientId, mode, metric){
+  // returns [{source, color, id, cur, pri}] — one row per CHANNEL (state.channels), aggregated
+  // from whichever raw sources are currently mapped to it (state.mapping). This is what makes
+  // Admin edits (rename / merge / reassign) flow straight through to the Overview & Traffic tabs.
+  const raw = DATASET[clientId].rawDaily;
+  const p = PERIODS[mode];
+  return state.channels.map(ch=>{
+    let cur=0, pri=0;
+    RAW_SOURCES.forEach(r=>{
+      if(state.mapping[r.id]===ch.id){
+        cur += sumRange(TREND_DATES, raw[r.id][metric], p.curFrom, p.curTo);
+        pri += sumRange(TREND_DATES, raw[r.id][metric], p.priFrom, p.priTo);
+      }
+    });
+    return { source: ch.name, color: ch.color, id: ch.id, cur, pri };
+  }).filter(row => row.id!=='unmapped' || row.cur>0 || row.pri>0);
+}
+function siteTotal(clientId, mode, metric){
+  return sourceTotals(clientId, mode, metric).reduce((s,r)=>({cur:s.cur+r.cur, pri:s.pri+r.pri}), {cur:0,pri:0});
+}
+function dealerMetric(clientId, mode, metric, channelId){
+  // channelId==='all' -> whole-site total (mapping-independent); otherwise a single channel's total.
+  if(channelId==='all') return siteTotal(clientId, mode, metric);
+  const row = sourceTotals(clientId, mode, metric).find(r=>r.id===channelId);
+  return row ? { cur: row.cur, pri: row.pri } : { cur: 0, pri: 0 };
+}
+function inventoryRows(clientId, mode){
+  const inv = DATASET[clientId].inventory;
+  const p = PERIODS[mode];
+  return inv.map(v=>{
+    const vdp1 = sumRange(VEH_DATES, v.daily, p.curFrom, p.curTo);
+    const vdp0 = sumRange(VEH_DATES, v.daily, p.priFrom, p.priTo);
+    return {
+      stock:v.stock, make:v.make, model:v.model, year:v.year, condition:v.condition, category:v.category,
+      vdp1, vdp0, vdpmom: safeDiv(vdp1-vdp0, vdp0)*100,
+      uniq1: vdp1*v.uniqueRate,
+    };
+  });
+}
+function cumulativeSeries(clientId, mode, metric){
+  // Site-wide total across ALL raw sources — intentionally mapping-independent, since renaming
+  // or merging channels in Admin shouldn't change true business totals, only how they're grouped.
+  const raw = DATASET[clientId].rawDaily;
+  const p = PERIODS[mode];
+  function build(fromISO,toISO){
+    const dates = TREND_DATES.filter(d=>d>=fromISO && d<=toISO);
+    let running = 0;
+    return dates.map(iso=>{
+      const idx = TREND_DATES.indexOf(iso);
+      let dayTotal = 0;
+      RAW_SOURCES.forEach(r=>{ dayTotal += raw[r.id][metric][idx]; });
+      running += dayTotal;
+      return running;
+    });
+  }
+  return { cur: build(p.curFrom,p.curTo), pri: build(p.priFrom,p.priTo) };
+}
+
+/* =========================================================================
+   5. STATE
+   ========================================================================= */
+const state = { clientId: CLIENTS[0].id, ovMode:'mtd', trMode:'mtd', trMetric:'page', invMode:'mtd',
+  invMake:'all', invCond:'all', invCat:'all', invSearch:'', invSort:{k:'vdp1',dir:-1}, invPage:0, invPageSize:12,
+  trSort:{k:'pv1',dir:-1},
+  channels: defaultChannels(), mapping: defaultMapping(),
+  adminSearch:'', adminSelected: new Set(),
+  pfMode:'mtd', pfMetric:'page', pfChannel:'all', pfSort:{k:'pv1',dir:-1},
+  users: defaultUsers(), currentUser: null };
+
+function applyMappingChange(){ renderOverview(); renderTraffic(); renderAdmin(); }
+
+let charts = {};
+function killChart(name){ if(charts[name]){ charts[name].destroy(); delete charts[name]; } }
+
+/* =========================================================================
+   6. RENDER: HEADER / TABS
+   ========================================================================= */
+const clientSelect = document.getElementById('clientSelect');
+function populateClientSelect(){
+  // Agency users can see/switch every dealer; a dealer login only ever sees its own single option
+  // and the control is disabled — there's nothing to switch to.
+  const user = state.currentUser;
+  const isAgency = !user || user.role==='agency';
+  const list = isAgency ? CLIENTS : CLIENTS.filter(c=>c.id===user.clientId);
+  clientSelect.innerHTML = list.map(c=>`<option value="${c.id}">${c.name} (${c.vertical})</option>`).join('');
+  clientSelect.value = state.clientId;
+  clientSelect.disabled = !isAgency;
+}
+populateClientSelect();
+clientSelect.addEventListener('change', ()=>{ state.clientId = clientSelect.value; state.invPage=0; renderAll(); });
+document.getElementById('asOfNote').textContent = 'Data as of ' + TODAY.toLocaleDateString('en-US',{month:'long',day:'numeric',year:'numeric'});
+
+const TAB_RENDERERS = { portfolio: ()=>renderPortfolio(), users: ()=>renderUsers(), overview: ()=>renderOverview(), traffic: ()=>renderTraffic(), inventory: ()=>renderInventory(), admin: ()=>renderAdmin() };
+const DEALER_VIEWS = ['overview','traffic','inventory','admin']; // views that live inside the dealer breadcrumb bar
+const DEALER_ROLE_ALLOWED = ['overview','traffic','inventory'];  // subset a dealer-role login may actually reach (no channel-mapping admin)
+function activateTab(view){
+  const user = state.currentUser;
+  // Safety net: even if hidden nav elements were somehow triggered, a dealer login can never
+  // land on the portfolio, user management, or channel-mapping admin views.
+  if(user && user.role==='dealer' && !DEALER_ROLE_ALLOWED.includes(view)) view = 'overview';
+  const isDealerView = DEALER_VIEWS.includes(view);
+  document.querySelectorAll('.nav-home-btn').forEach(b=>b.classList.toggle('active', b.dataset.view===view));
+  document.getElementById('dealerBar').classList.toggle('show', isDealerView);
+  document.querySelectorAll('.tabs-sub .tab-btn').forEach(b=>b.classList.toggle('active', b.dataset.view===view));
+  document.querySelectorAll('.view').forEach(v=>v.classList.toggle('active', v.id==='view-'+view));
+  // Charts created while their tab is display:none get sized to 0x0 by Chart.js and never
+  // redraw on their own — re-render the tab's charts now that its container is actually visible.
+  TAB_RENDERERS[view] && TAB_RENDERERS[view]();
+}
+document.querySelectorAll('.nav-home-btn').forEach(btn=>{
+  btn.addEventListener('click', ()=> activateTab(btn.dataset.view));
+});
+document.getElementById('backToPortfolio').addEventListener('click', ()=> activateTab('portfolio'));
+document.querySelectorAll('.tabs-sub .tab-btn').forEach(btn=>{
+  btn.addEventListener('click', ()=> activateTab(btn.dataset.view));
+});
+function goToDealer(clientId){
+  if(state.currentUser && state.currentUser.role==='dealer') return; // dealers can't jump to other dealers
+  state.clientId = clientId;
+  clientSelect.value = clientId;
+  state.invPage = 0;
+  renderOverview(); renderTraffic(); renderInventory(); renderAdmin();
+  activateTab('overview');
+}
+
+function wireSeg(id, key, cb){
+  document.querySelectorAll('#'+id+' button').forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      document.querySelectorAll('#'+id+' button').forEach(b=>b.classList.remove('active'));
+      btn.classList.add('active');
+      cb(btn);
+    });
+  });
+}
+wireSeg('pfCompareSeg', 'mode', btn=>{ state.pfMode = btn.dataset.mode; renderPortfolio(); });
+wireSeg('pfMetricSeg', 'metric', btn=>{ state.pfMetric = btn.dataset.metric; renderPortfolio(); });
+wireSeg('ovCompareSeg', 'mode', btn=>{ state.ovMode = btn.dataset.mode; renderOverview(); });
+wireSeg('trCompareSeg', 'mode', btn=>{ state.trMode = btn.dataset.mode; renderTraffic(); });
+wireSeg('trMetricSeg', 'metric', btn=>{ state.trMetric = btn.dataset.metric; renderTraffic(); });
+wireSeg('invCompareSeg', 'mode', btn=>{ state.invMode = btn.dataset.mode; renderInventory(); });
+wireSeg('invCondSeg', 'cond', btn=>{ state.invCond = btn.dataset.cond; state.invPage=0; renderInventory(); });
+
+/* =========================================================================
+   7. RENDER: OVERVIEW
+   ========================================================================= */
+function renderOverview(){
+  const mode = state.ovMode;
+  const p = PERIODS[mode];
+  const pv = siteTotal(state.clientId, mode, 'page');
+  const vdp = siteTotal(state.clientId, mode, 'vdp');
+  const pvMom = safeDiv(pv.cur-pv.pri, pv.pri)*100;
+  const vdpMom = safeDiv(vdp.cur-vdp.pri, vdp.pri)*100;
+  const rateCur = safeDiv(vdp.cur, pv.cur)*100;
+  const ratePri = safeDiv(vdp.pri, pv.pri)*100;
+
+  const kpis = [
+    { lbl:`Page Views · ${p.curLabel}`, val: fmt(pv.cur), delta: pvMom, sub: `vs ${fmt(pv.pri)} (${p.priLabel})` },
+    { lbl:`VDP Views · ${p.curLabel}`, val: fmt(vdp.cur), delta: vdpMom, sub: `vs ${fmt(vdp.pri)} (${p.priLabel})` },
+    { lbl:'VDP Rate (VDP / Page Views)', val: rateCur.toFixed(1)+'%', delta: rateCur-ratePri, sub: `vs ${ratePri.toFixed(1)}% prior`, isPP:true },
+    { lbl:'Avg VDP Views / Vehicle', val: fmt(safeDiv(vdp.cur, DATASET[state.clientId].inventory.length)), delta: null, sub: `${DATASET[state.clientId].inventory.length} vehicles in inventory` },
+  ];
+  document.getElementById('ovKpis').innerHTML = kpis.map(k=>`
+    <div class="kpi">
+      <div class="lbl">${k.lbl}</div>
+      <div class="val mono">${k.val}</div>
+      ${k.delta===null ? `<div class="delta flat">${k.sub}</div>` :
+        `<div class="delta ${momClass(k.delta/100)}">${k.isPP? (k.delta>=0?'+':'')+k.delta.toFixed(1)+' pts' : pct(k.delta)} ${k.sub}</div>`}
+    </div>`).join('');
+
+  document.getElementById('ovLineTitle').textContent = mode==='mtd' ? 'Cumulative Page Views — Month to Date' : 'Cumulative Page Views — Full Month';
+  document.getElementById('ovLineSub').textContent = mode==='mtd'
+    ? `Running total, ${p.curLabel} vs. ${p.priLabel} (same calendar days last month)`
+    : `Running total, ${p.curLabel} vs. ${p.priLabel}`;
+
+  const series = cumulativeSeries(state.clientId, mode, 'page');
+  const labels = Array.from({length: Math.max(series.cur.length, series.pri.length)}, (_,i)=>'Day '+(i+1));
+  killChart('ovLine');
+  charts.ovLine = new Chart(document.getElementById('ovLineChart'), {
+    type:'line',
+    data:{ labels, datasets:[
+      { label: p.curLabel+' (current)', data: series.cur, borderColor:'#2563eb', backgroundColor:'rgba(37,99,235,.08)', fill:true, tension:.3, pointRadius:0, borderWidth:2.5 },
+      { label: p.priLabel+' (prior)', data: series.pri, borderColor:'#94a3b8', backgroundColor:'transparent', borderDash:[5,4], tension:.3, pointRadius:0, borderWidth:2 },
+    ]},
+    options:{ responsive:true, plugins:{legend:{position:'bottom', labels:{boxWidth:12,font:{size:11}}}}, scales:{ y:{ ticks:{ callback:v=>fmt(v) } } } }
+  });
+
+  // Top vehicles
+  const rows = inventoryRows(state.clientId, mode).sort((a,b)=>b.vdp1-a.vdp1).slice(0,5);
+  document.getElementById('ovTopVehicles').querySelector('tbody').innerHTML = rows.map(r=>`
+    <tr><td>${r.year} ${r.make} ${r.model} <span class="tag ${r.condition.toLowerCase()}">${r.condition}</span></td>
+    <td class="right mono">${fmt(r.vdp1)}</td>
+    <td class="right delta ${momClass(r.vdpmom/100)}">${pct(r.vdpmom)}</td></tr>`).join('');
+
+  // Source chart (page vs vdp, current period)
+  const srcPV = sourceTotals(state.clientId, mode, 'page');
+  const srcVDP = sourceTotals(state.clientId, mode, 'vdp');
+  killChart('ovSource');
+  charts.ovSource = new Chart(document.getElementById('ovSourceChart'), {
+    type:'bar',
+    data:{ labels: srcPV.map(s=>s.source),
+      datasets:[
+        { label:'Page Views', data: srcPV.map(s=>s.cur), backgroundColor:'#93c5fd', borderRadius:4 },
+        { label:'VDP Views', data: srcVDP.map(s=>s.cur), backgroundColor:'#2563eb', borderRadius:4 },
+      ]},
+    options:{ responsive:true, plugins:{legend:{position:'bottom',labels:{boxWidth:12,font:{size:11}}}}, scales:{ x:{ ticks:{font:{size:10.5}} }, y:{ ticks:{callback:v=>fmt(v)} } } }
+  });
+
+  // New vs used donut
+  const invRows = inventoryRows(state.clientId, mode);
+  const newSum = invRows.filter(r=>r.condition==='New').reduce((s,r)=>s+r.vdp1,0);
+  const usedSum = invRows.filter(r=>r.condition==='Used').reduce((s,r)=>s+r.vdp1,0);
+  killChart('ovNewUsed');
+  charts.ovNewUsed = new Chart(document.getElementById('ovNewUsedChart'), {
+    type:'doughnut',
+    data:{ labels:['New','Used'], datasets:[{ data:[newSum,usedSum], backgroundColor:['#16a34a','#3730a3'] }] },
+    options:{ responsive:true, plugins:{legend:{position:'bottom'}} }
+  });
+}
+
+/* =========================================================================
+   8. RENDER: TRAFFIC BY SOURCE
+   ========================================================================= */
+function renderTraffic(){
+  const mode = state.trMode, metric = state.trMetric;
+  const p = PERIODS[mode];
+  document.getElementById('trBarSub').textContent = `${metric==='page'?'Page Views':'VDP Views'}: ${p.curLabel} vs. ${p.priLabel}`;
+
+  const pvRows = sourceTotals(state.clientId, mode, 'page');
+  const vdpRows = sourceTotals(state.clientId, mode, 'vdp');
+  const rowsRaw = pvRows.map(pvT=>{
+    const vdpT = vdpRows.find(v=>v.id===pvT.id) || {cur:0,pri:0};
+    return {
+      source: pvT.source, color: pvT.color,
+      pv1: pvT.cur, pv0: pvT.pri, pvmom: safeDiv(pvT.cur-pvT.pri,pvT.pri)*100,
+      vdp1: vdpT.cur, vdp0: vdpT.pri, vdpmom: safeDiv(vdpT.cur-vdpT.pri,vdpT.pri)*100,
+      rate: safeDiv(vdpT.cur, pvT.cur)*100,
+    };
+  });
+  const sortKey = state.trSort.k, dir = state.trSort.dir;
+  rowsRaw.sort((a,b)=> (a[sortKey]>b[sortKey]?1:-1)*dir);
+
+  killChart('trBar');
+  const barSrc = [...rowsRaw].sort((a,b)=>b[metric+'1']-a[metric+'1']);
+  charts.trBar = new Chart(document.getElementById('trBarChart'), {
+    type:'bar',
+    data:{ labels: barSrc.map(r=>r.source),
+      datasets:[
+        { label:p.curLabel, data: barSrc.map(r=>r[metric+'1']), backgroundColor: barSrc.map(r=>r.color), borderRadius:4 },
+        { label:p.priLabel, data: barSrc.map(r=>r[metric+'0']), backgroundColor:'#e2e8f0', borderRadius:4 },
+      ]},
+    options:{ responsive:true, plugins:{legend:{position:'bottom',labels:{boxWidth:12,font:{size:11}}}}, scales:{ y:{ ticks:{callback:v=>fmt(v)} } } }
+  });
+
+  document.getElementById('trTable').querySelector('tbody').innerHTML = rowsRaw.map(r=>`
+    <tr>
+      <td><span class="legend-swatch" style="background:${r.color}"></span>${r.source}</td>
+      <td class="right mono">${fmt(r.pv1)}</td>
+      <td class="right mono">${fmt(r.pv0)}</td>
+      <td class="right delta ${momClass(r.pvmom/100)}">${pct(r.pvmom)}</td>
+      <td class="right mono">${fmt(r.vdp1)}</td>
+      <td class="right mono">${fmt(r.vdp0)}</td>
+      <td class="right delta ${momClass(r.vdpmom/100)}">${pct(r.vdpmom)}</td>
+      <td class="right mono">${r.rate.toFixed(1)}%</td>
+    </tr>`).join('');
+
+  document.querySelectorAll('#trTable th').forEach(th=>{
+    th.classList.toggle('sorted', th.dataset.k===sortKey);
+    th.onclick = ()=>{
+      state.trSort.dir = (state.trSort.k===th.dataset.k) ? -state.trSort.dir : -1;
+      state.trSort.k = th.dataset.k;
+      renderTraffic();
+    };
+  });
+}
+
+/* =========================================================================
+   9. RENDER: INVENTORY PERFORMANCE
+   ========================================================================= */
+function populateInvFilters(){
+  const client = DATASET[state.clientId].client;
+  const makeSel = document.getElementById('invMakeFilter');
+  const catSel = document.getElementById('invCatFilter');
+  makeSel.innerHTML = '<option value="all">All Makes</option>' + Object.keys(client.makes).map(m=>`<option value="${m}">${m}</option>`).join('');
+  catSel.innerHTML = '<option value="all">All Categories</option>' + client.categories.map(c=>`<option value="${c}">${c}</option>`).join('');
+  makeSel.value = 'all'; catSel.value = 'all';
+  makeSel.onchange = ()=>{ state.invMake = makeSel.value; state.invPage=0; renderInventory(); };
+  catSel.onchange = ()=>{ state.invCat = catSel.value; state.invPage=0; renderInventory(); };
+}
+document.getElementById('invSearch').addEventListener('input', (e)=>{ state.invSearch = e.target.value.toLowerCase(); state.invPage=0; renderInventory(); });
+document.getElementById('invPrev').addEventListener('click', ()=>{ if(state.invPage>0){ state.invPage--; renderInventory(); } });
+document.getElementById('invNext').addEventListener('click', ()=>{ state.invPage++; renderInventory(); });
+
+function renderInventory(){
+  const mode = state.invMode;
+  let rows = inventoryRows(state.clientId, mode);
+
+  if(state.invMake!=='all') rows = rows.filter(r=>r.make===state.invMake);
+  if(state.invCat!=='all') rows = rows.filter(r=>r.category===state.invCat);
+  if(state.invCond!=='all') rows = rows.filter(r=>r.condition===state.invCond);
+  if(state.invSearch) rows = rows.filter(r=> (r.stock+' '+r.model+' '+r.make).toLowerCase().includes(state.invSearch));
+
+  // KPIs
+  const totalVdp1 = rows.reduce((s,r)=>s+r.vdp1,0);
+  const totalVdp0 = rows.reduce((s,r)=>s+r.vdp0,0);
+  const totalUniq = rows.reduce((s,r)=>s+r.uniq1,0);
+  const avgPerVehicle = safeDiv(totalVdp1, rows.length);
+  const zeroView = rows.filter(r=>r.vdp1<1).length;
+  const p = PERIODS[mode];
+  const kpis = [
+    { lbl:`VDP Views · ${p.curLabel}`, val: fmt(totalVdp1), delta: safeDiv(totalVdp1-totalVdp0,totalVdp0)*100, sub:`vs ${fmt(totalVdp0)} (${p.priLabel})` },
+    { lbl:'Unique VDP Views', val: fmt(totalUniq), delta:null, sub: `${safeDiv(totalUniq,totalVdp1)*100|0}% of total views` },
+    { lbl:'Avg VDP Views / Vehicle', val: fmt(avgPerVehicle), delta:null, sub: `${rows.length} vehicles in view` },
+    { lbl:'Vehicles w/ 0 VDP Views', val: zeroView, delta:null, sub: zeroView>0 ? 'Consider repricing / photos' : 'All vehicles getting views' },
+  ];
+  document.getElementById('invKpis').innerHTML = kpis.map(k=>`
+    <div class="kpi"><div class="lbl">${k.lbl}</div><div class="val mono">${k.val}</div>
+    ${k.delta===null? `<div class="delta flat">${k.sub}</div>` : `<div class="delta ${momClass(k.delta/100)}">${pct(k.delta)} ${k.sub}</div>`}</div>`).join('');
+
+  // Make chart (stacked new/used)
+  const client = DATASET[state.clientId].client;
+  const makeNames = Object.keys(client.makes);
+  const newByMake = makeNames.map(m=>rows.filter(r=>r.make===m && r.condition==='New').reduce((s,r)=>s+r.vdp1,0));
+  const usedByMake = makeNames.map(m=>rows.filter(r=>r.make===m && r.condition==='Used').reduce((s,r)=>s+r.vdp1,0));
+  killChart('invMake');
+  charts.invMake = new Chart(document.getElementById('invMakeChart'), {
+    type:'bar',
+    data:{ labels: makeNames, datasets:[
+      { label:'New', data:newByMake, backgroundColor:'#16a34a', borderRadius:4 },
+      { label:'Used', data:usedByMake, backgroundColor:'#3730a3', borderRadius:4 },
+    ]},
+    options:{ responsive:true, plugins:{legend:{position:'bottom'}}, scales:{ x:{stacked:true}, y:{stacked:true, ticks:{callback:v=>fmt(v)}} } }
+  });
+
+  // Category chart
+  const catNames = client.categories;
+  const catVals = catNames.map(c=>rows.filter(r=>r.category===c).reduce((s,r)=>s+r.vdp1,0));
+  killChart('invCat');
+  charts.invCat = new Chart(document.getElementById('invCatChart'), {
+    type:'bar',
+    data:{ labels: catNames, datasets:[{ label:'VDP Views', data:catVals, backgroundColor:'#0891b2', borderRadius:4 }]},
+    options:{ indexAxis:'y', responsive:true, plugins:{legend:{display:false}}, scales:{ x:{ ticks:{callback:v=>fmt(v)} } } }
+  });
+
+  // Table w/ sort + pagination
+  const sortKey = state.invSort.k, dir = state.invSort.dir;
+  rows.sort((a,b)=>{
+    const av=a[sortKey], bv=b[sortKey];
+    if(typeof av==='string') return av.localeCompare(bv)*dir;
+    return (av-bv)*dir;
+  });
+  document.getElementById('invCount').textContent = `(${rows.length} vehicles)`;
+  const start = state.invPage*state.invPageSize;
+  const pageRows = rows.slice(start, start+state.invPageSize);
+  document.getElementById('invTable').querySelector('tbody').innerHTML = pageRows.map(r=>`
+    <tr>
+      <td class="mono">${r.stock}</td><td>${r.make}</td><td>${r.model}</td><td>${r.year}</td>
+      <td><span class="tag ${r.condition.toLowerCase()}">${r.condition}</span></td><td>${r.category}</td>
+      <td class="right mono">${fmt(r.vdp1)}</td>
+      <td class="right mono">${fmt(r.vdp0)}</td>
+      <td class="right delta ${momClass(r.vdpmom/100)}">${r.vdp0<1? '—' : pct(r.vdpmom)}</td>
+      <td class="right mono">${fmt(r.uniq1)}</td>
+    </tr>`).join('') || `<tr><td colspan="10" style="text-align:center;color:var(--muted);padding:20px;">No vehicles match these filters</td></tr>`;
+
+  document.getElementById('invPageInfo').textContent = rows.length ? `Showing ${start+1}–${Math.min(start+state.invPageSize,rows.length)} of ${rows.length}` : '';
+  document.getElementById('invPrev').disabled = state.invPage===0;
+  document.getElementById('invNext').disabled = start+state.invPageSize>=rows.length;
+
+  document.querySelectorAll('#invTable th').forEach(th=>{
+    th.classList.toggle('sorted', th.dataset.k===sortKey);
+    th.onclick = ()=>{
+      state.invSort.dir = (state.invSort.k===th.dataset.k) ? -state.invSort.dir : -1;
+      state.invSort.k = th.dataset.k;
+      renderInventory();
+    };
+  });
+}
+
+/* =========================================================================
+   10. RENDER: ALL DEALERS (PORTFOLIO)
+   ========================================================================= */
+function populatePfChannelFilter(){
+  const sel = document.getElementById('pfChannelFilter');
+  const prev = sel.value || state.pfChannel;
+  sel.innerHTML = '<option value="all">All Channels</option>' + state.channels
+    .filter(c=>c.id!=='unmapped' || channelMappedCount('unmapped')>0)
+    .map(c=>`<option value="${c.id}">${c.name}</option>`).join('');
+  sel.value = [...sel.options].some(o=>o.value===prev) ? prev : 'all';
+  state.pfChannel = sel.value;
+}
+
+function renderPortfolio(){
+  populatePfChannelFilter();
+  const mode = state.pfMode, metric = state.pfMetric, channelId = state.pfChannel;
+  const fp = metric==='page' ? 'pv' : 'vdp'; // field prefix — row keys are pv1/pv0/pvmom or vdp1/vdp0/vdpmom
+  const p = PERIODS[mode];
+  const metricLabel = metric==='page' ? 'Page Views' : 'VDP Views';
+  const channelLabel = channelId==='all' ? 'All Channels' : state.channels.find(c=>c.id===channelId)?.name || 'All Channels';
+
+  document.getElementById('pfChartTitle').textContent = `${metricLabel} by Dealer — ${channelLabel}`;
+  document.getElementById('pfChartSub').textContent = `${p.curLabel} vs. ${p.priLabel}`;
+  document.getElementById('pfTableSub').textContent = `Comparing ${p.curLabel} to ${p.priLabel}, filtered to ${channelLabel}`;
+
+  const rows = CLIENTS.map(client=>{
+    const pv = dealerMetric(client.id, mode, 'page', channelId);
+    const vdp = dealerMetric(client.id, mode, 'vdp', channelId);
+    return {
+      id: client.id, name: client.name, vertical: client.vertical,
+      pv1: pv.cur, pv0: pv.pri, pvmom: safeDiv(pv.cur-pv.pri, pv.pri)*100,
+      vdp1: vdp.cur, vdp0: vdp.pri, vdpmom: safeDiv(vdp.cur-vdp.pri, vdp.pri)*100,
+      rate: safeDiv(vdp.cur, pv.cur)*100,
+    };
+  });
+
+  // Channel totals across the whole portfolio (reused by the KPI card below and the breakdown grid)
+  const displayChannels = state.channels.filter(ch=> ch.id!=='unmapped' || CLIENTS.some(c=>{
+    const row = sourceTotals(c.id, mode, metric).find(r=>r.id==='unmapped');
+    return row && (row.cur>0 || row.pri>0);
+  }));
+  const channelTotals = displayChannels.map(ch=>{
+    const total = CLIENTS.reduce((s,c)=>{
+      const row = sourceTotals(c.id, mode, metric).find(r=>r.id===ch.id);
+      return s + (row ? row.cur : 0);
+    }, 0);
+    return { id: ch.id, name: ch.name, color: ch.color, total };
+  });
+  const topChannel = [...channelTotals].sort((a,b)=>b.total-a.total)[0];
+
+  // KPI summary across the whole portfolio
+  const best = [...rows].sort((a,b)=>b[fp+'mom']-a[fp+'mom'])[0];
+  const worst = [...rows].sort((a,b)=>a[fp+'mom']-b[fp+'mom'])[0];
+  const kpis = [
+    { lbl:'Dealers Tracked', val: rows.length, delta:null, sub: channelLabel },
+    { lbl:'Fastest Growing', val: best ? best.name : '—', delta:null, sub: best ? pct(best[fp+'mom'])+' MoM' : '' },
+    { lbl:'Needs Attention', val: worst ? worst.name : '—', delta:null, sub: worst ? pct(worst[fp+'mom'])+' MoM' : '' },
+    { lbl:`Top Channel · ${p.curLabel}`, val: topChannel ? topChannel.name : '—', delta:null, sub: topChannel ? fmt(topChannel.total)+' '+metricLabel.toLowerCase()+' (all dealers)' : '' },
+  ];
+  document.getElementById('pfKpis').innerHTML = kpis.map(k=>`
+    <div class="kpi"><div class="lbl">${k.lbl}</div><div class="val mono">${k.val}</div>
+    ${k.delta===null ? `<div class="delta flat">${k.sub}</div>` : `<div class="delta ${momClass(k.delta/100)}">${pct(k.delta)} ${k.sub}</div>`}</div>`).join('');
+
+  document.getElementById('pfGridSub').textContent = `${metricLabel}, ${p.curLabel} — every channel at once, no filter needed. Click a dealer to open it.`;
+
+  // Channel breakdown grid: every dealer x every channel, current period, selected metric.
+  const headCells = displayChannels.map(ch=>`<th class="right"><span class="legend-swatch" style="background:${ch.color}"></span>${ch.name}</th>`).join('');
+  document.getElementById('pfGridHead').innerHTML = `<th>Dealer</th>${headCells}<th class="right" style="border-left:2px solid var(--border);">Total</th>`;
+  const gridRows = CLIENTS.map(client=>{
+    const cells = displayChannels.map(ch=>{
+      const row = sourceTotals(client.id, mode, metric).find(r=>r.id===ch.id);
+      return row ? row.cur : 0;
+    });
+    const total = cells.reduce((s,v)=>s+v,0);
+    return { client, cells, total };
+  });
+  document.getElementById('pfGridBody').innerHTML = gridRows.map(gr=>`
+    <tr data-id="${gr.client.id}">
+      <td class="dealer-name">${gr.client.name}<span class="vert-tag">${gr.client.vertical}</span></td>
+      ${gr.cells.map(v=>`<td class="right mono">${fmt(v)}</td>`).join('')}
+      <td class="right mono" style="border-left:2px solid var(--border);font-weight:700;">${fmt(gr.total)}</td>
+    </tr>`).join('') + `
+    <tr style="font-weight:700;background:#f8fafc;">
+      <td>All Dealers</td>
+      ${channelTotals.map(ct=>`<td class="right mono">${fmt(ct.total)}</td>`).join('')}
+      <td class="right mono" style="border-left:2px solid var(--border);">${fmt(channelTotals.reduce((s,c)=>s+c.total,0))}</td>
+    </tr>`;
+  document.querySelectorAll('#pfChannelGrid tbody tr[data-id]').forEach(tr=>{
+    tr.style.cursor = 'pointer';
+    tr.onclick = ()=> goToDealer(tr.dataset.id);
+  });
+
+  // Sort table
+  const sortKey = state.pfSort.k, dir = state.pfSort.dir;
+  const sorted = [...rows].sort((a,b)=>{
+    const av=a[sortKey], bv=b[sortKey];
+    if(typeof av==='string') return av.localeCompare(bv)*dir;
+    return (av-bv)*dir;
+  });
+
+  killChart('pfBar');
+  const barSort = [...rows].sort((a,b)=>b[fp+'1']-a[fp+'1']);
+  charts.pfBar = new Chart(document.getElementById('pfBarChart'), {
+    type:'bar',
+    data:{ labels: barSort.map(r=>r.name),
+      datasets:[
+        { label:p.curLabel, data: barSort.map(r=>r[fp+'1']), backgroundColor:'#2563eb', borderRadius:4 },
+        { label:p.priLabel, data: barSort.map(r=>r[fp+'0']), backgroundColor:'#e2e8f0', borderRadius:4 },
+      ]},
+    options:{ responsive:true, onClick:(evt, els)=>{ if(els.length){ goToDealer(barSort[els[0].index].id); } },
+      plugins:{legend:{position:'bottom',labels:{boxWidth:12,font:{size:11}}}}, scales:{ y:{ ticks:{callback:v=>fmt(v)} } } }
+  });
+
+  document.getElementById('pfTable').querySelector('tbody').innerHTML = sorted.map(r=>`
+    <tr data-id="${r.id}">
+      <td class="dealer-name">${r.name}<span class="vert-tag">${r.vertical}</span></td>
+      <td>${r.vertical}</td>
+      <td class="right mono">${fmt(r.pv1)}</td>
+      <td class="right mono">${fmt(r.pv0)}</td>
+      <td class="right delta ${momClass(r.pvmom/100)}">${pct(r.pvmom)}</td>
+      <td class="right mono">${fmt(r.vdp1)}</td>
+      <td class="right mono">${fmt(r.vdp0)}</td>
+      <td class="right delta ${momClass(r.vdpmom/100)}">${pct(r.vdpmom)}</td>
+      <td class="right mono">${r.rate.toFixed(1)}%</td>
+    </tr>`).join('');
+
+  document.querySelectorAll('#pfTable tbody tr').forEach(tr=>{
+    tr.onclick = ()=> goToDealer(tr.dataset.id);
+  });
+  document.querySelectorAll('#pfTable th').forEach(th=>{
+    th.classList.toggle('sorted', th.dataset.k===sortKey);
+    th.onclick = ()=>{
+      state.pfSort.dir = (state.pfSort.k===th.dataset.k) ? -state.pfSort.dir : -1;
+      state.pfSort.k = th.dataset.k;
+      renderPortfolio();
+    };
+  });
+}
+document.getElementById('pfChannelFilter').addEventListener('change', e=>{ state.pfChannel = e.target.value; renderPortfolio(); });
+
+/* =========================================================================
+   11. ADMIN: SOURCE MAPPING
+   ========================================================================= */
+function channelMappedCount(chId){
+  return RAW_SOURCES.filter(r=>state.mapping[r.id]===chId).length;
+}
+function addChannel(){
+  const color = CHANNEL_PALETTE[state.channels.length % CHANNEL_PALETTE.length];
+  const idx = state.channels.findIndex(c=>c.id==='unmapped');
+  const newCh = { id:'ch-'+Date.now(), name:'New Channel', color };
+  state.channels.splice(idx<0?state.channels.length:idx, 0, newCh);
+  applyMappingChange();
+}
+function renameChannel(id, name){
+  const ch = state.channels.find(c=>c.id===id);
+  if(ch) ch.name = name || ch.name;
+  applyMappingChange();
+}
+function deleteChannel(id){
+  if(id==='unmapped') return;
+  Object.keys(state.mapping).forEach(rid=>{ if(state.mapping[rid]===id) state.mapping[rid]='unmapped'; });
+  state.channels = state.channels.filter(c=>c.id!==id);
+  applyMappingChange();
+}
+function mergeChannel(fromId, intoId){
+  if(!intoId || fromId===intoId) return;
+  Object.keys(state.mapping).forEach(rid=>{ if(state.mapping[rid]===fromId) state.mapping[rid]=intoId; });
+  if(fromId!=='unmapped') state.channels = state.channels.filter(c=>c.id!==fromId);
+  applyMappingChange();
+}
+function resetMapping(){
+  state.channels = defaultChannels();
+  state.mapping = defaultMapping();
+  state.adminSelected.clear();
+  applyMappingChange();
+}
+function channelOptionsHTML(selectedId, excludeId){
+  return state.channels.filter(c=>c.id!==excludeId).map(c=>
+    `<option value="${c.id}" ${c.id===selectedId?'selected':''}>${c.name}</option>`).join('');
+}
+
+function renderAdmin(){
+  const clientId = state.clientId;
+  const raw = DATASET[clientId].rawDaily;
+  const p = PERIODS.mtd;
+
+  // --- Channel manager table ---
+  const pvByChannel = sourceTotals(clientId, 'mtd', 'page'); // for view counts (excludes empty unmapped)
+  document.getElementById('adminChannelTable').querySelector('tbody').innerHTML = state.channels.map(ch=>{
+    const count = channelMappedCount(ch.id);
+    const pv = pvByChannel.find(r=>r.id===ch.id);
+    const views = pv ? fmt(pv.cur) : '0';
+    const otherChannels = state.channels.filter(c=>c.id!==ch.id);
+    return `<tr>
+      <td>
+        <span class="legend-swatch" style="background:${ch.color}"></span>
+        <input type="text" data-id="${ch.id}" class="chAdmin-rename" value="${ch.name}"
+          style="border:1px solid var(--border);border-radius:6px;padding:4px 7px;font-size:12.8px;width:130px;">
+      </td>
+      <td class="right mono">${count}</td>
+      <td class="right mono">${views}</td>
+      <td class="right">
+        ${otherChannels.length ? `
+        <select data-id="${ch.id}" class="chAdmin-merge" style="font-size:11.5px;padding:3px 5px;border-radius:6px;border:1px solid var(--border);">
+          <option value="">Merge into…</option>
+          ${otherChannels.map(o=>`<option value="${o.id}">${o.name}</option>`).join('')}
+        </select>` : ''}
+        ${ch.id!=='unmapped' ? `<button data-id="${ch.id}" class="chAdmin-delete chip-btn" style="cursor:pointer;color:var(--bad);margin-left:4px;">Delete</button>` : ''}
+      </td>
+    </tr>`;
+  }).join('');
+
+  document.querySelectorAll('.chAdmin-rename').forEach(inp=>{
+    inp.onchange = ()=> renameChannel(inp.dataset.id, inp.value.trim());
+  });
+  document.querySelectorAll('.chAdmin-merge').forEach(sel=>{
+    sel.onchange = ()=>{ if(sel.value) mergeChannel(sel.dataset.id, sel.value); };
+  });
+  document.querySelectorAll('.chAdmin-delete').forEach(btn=>{
+    btn.onclick = ()=> deleteChannel(btn.dataset.id);
+  });
+  document.getElementById('adminAddChannel').onclick = addChannel;
+  document.getElementById('adminResetMapping').onclick = resetMapping;
+
+  // --- Live preview table (MTD, current client) ---
+  const pvRows = sourceTotals(clientId, 'mtd', 'page');
+  const vdpRows = sourceTotals(clientId, 'mtd', 'vdp');
+  document.getElementById('adminPreviewTable').querySelector('tbody').innerHTML = pvRows.map(pv=>{
+    const vdp = vdpRows.find(v=>v.id===pv.id) || {cur:0};
+    const rate = safeDiv(vdp.cur, pv.cur)*100;
+    return `<tr><td><span class="legend-swatch" style="background:${pv.color}"></span>${pv.source}</td>
+      <td class="right mono">${fmt(pv.cur)}</td><td class="right mono">${fmt(vdp.cur)}</td><td class="right mono">${rate.toFixed(1)}%</td></tr>`;
+  }).join('') || `<tr><td colspan="4" style="color:var(--muted);text-align:center;padding:14px;">Nothing mapped yet</td></tr>`;
+
+  // --- Raw source table ---
+  let rows = RAW_SOURCES.map(r=>({
+    ...r,
+    pv: sumRange(TREND_DATES, raw[r.id].page, p.curFrom, p.curTo),
+    vdp: sumRange(TREND_DATES, raw[r.id].vdp, p.curFrom, p.curTo),
+  }));
+  if(state.adminSearch) rows = rows.filter(r => (r.rawSource+' '+r.rawMedium).toLowerCase().includes(state.adminSearch));
+  document.getElementById('adminRawCount').textContent = `(${rows.length} of ${RAW_SOURCES.length})`;
+
+  document.getElementById('adminRawTable').querySelector('tbody').innerHTML = rows.map(r=>`
+    <tr>
+      <td><input type="checkbox" class="adminRowSel" data-id="${r.id}" ${state.adminSelected.has(r.id)?'checked':''}></td>
+      <td class="mono">${r.rawSource}</td>
+      <td class="mono">${r.rawMedium}</td>
+      <td class="right mono">${fmt(r.pv)}</td>
+      <td class="right mono">${fmt(r.vdp)}</td>
+      <td><select class="adminRowChannel" data-id="${r.id}" style="font-size:12.5px;padding:4px 6px;border-radius:6px;border:1px solid var(--border);min-width:150px;">
+        ${channelOptionsHTML(state.mapping[r.id])}
+      </select></td>
+    </tr>`).join('') || `<tr><td colspan="6" style="color:var(--muted);text-align:center;padding:14px;">No raw sources match your search</td></tr>`;
+
+  document.querySelectorAll('.adminRowChannel').forEach(sel=>{
+    sel.onchange = ()=>{ state.mapping[sel.dataset.id] = sel.value; applyMappingChange(); };
+  });
+  document.querySelectorAll('.adminRowSel').forEach(cb=>{
+    cb.onchange = ()=>{
+      if(cb.checked) state.adminSelected.add(cb.dataset.id); else state.adminSelected.delete(cb.dataset.id);
+      updateAdminBulkBar();
+    };
+  });
+  document.getElementById('adminSelectAll').checked = rows.length>0 && rows.every(r=>state.adminSelected.has(r.id));
+  document.getElementById('adminSelectAll').onchange = (e)=>{
+    rows.forEach(r=> e.target.checked ? state.adminSelected.add(r.id) : state.adminSelected.delete(r.id));
+    renderAdmin();
+  };
+
+  // bulk assign target select
+  const bulkSel = document.getElementById('adminBulkTarget');
+  bulkSel.innerHTML = channelOptionsHTML(null);
+  updateAdminBulkBar();
+}
+function updateAdminBulkBar(){
+  const n = state.adminSelected.size;
+  document.getElementById('adminBulkBar').style.display = n>0 ? 'flex' : 'none';
+  document.getElementById('adminSelCount').textContent = n + ' selected';
+}
+document.getElementById('adminSearch').addEventListener('input', e=>{ state.adminSearch = e.target.value.toLowerCase(); renderAdmin(); });
+document.getElementById('adminBulkApply').addEventListener('click', ()=>{
+  const target = document.getElementById('adminBulkTarget').value;
+  if(!target) return;
+  state.adminSelected.forEach(rid=>{ state.mapping[rid] = target; });
+  state.adminSelected.clear();
+  applyMappingChange();
+});
+document.getElementById('adminBulkClear').addEventListener('click', ()=>{ state.adminSelected.clear(); renderAdmin(); });
+
+/* =========================================================================
+   12. USER MANAGEMENT (AGENCY ONLY)
+   ========================================================================= */
+function populateNewUserDealerSelect(){
+  document.getElementById('newUserDealer').innerHTML = CLIENTS.map(c=>`<option value="${c.id}">${c.name} (${c.vertical})</option>`).join('');
+}
+function renderUsers(){
+  populateNewUserDealerSelect();
+  document.getElementById('userTable').querySelector('tbody').innerHTML = state.users.map((u,i)=>{
+    const dealerName = u.clientId ? (CLIENTS.find(c=>c.id===u.clientId)?.name || u.clientId) : 'All Dealers';
+    return `<tr>
+      <td>${u.displayName}</td>
+      <td class="mono">${u.username}</td>
+      <td><input type="text" class="userPwInput" data-idx="${i}" value="${u.password}"
+        style="width:110px;font-size:12.5px;padding:4px 6px;border-radius:6px;border:1px solid var(--border);"></td>
+      <td><span class="tag ${u.role==='agency'?'new':'used'}">${u.role==='agency'?'Agency':'Dealer'}</span></td>
+      <td>${dealerName}</td>
+      <td><button class="chip-btn userDelete" data-idx="${i}" style="cursor:pointer;color:var(--bad);">Delete</button></td>
+    </tr>`;
+  }).join('');
+  document.querySelectorAll('.userPwInput').forEach(inp=>{
+    inp.onchange = ()=>{ state.users[+inp.dataset.idx].password = inp.value; renderDemoAccounts(); };
+  });
+  document.querySelectorAll('.userDelete').forEach(btn=>{
+    btn.onclick = ()=>{
+      const idx = +btn.dataset.idx;
+      const u = state.users[idx];
+      if(u.role==='agency' && state.users.filter(x=>x.role==='agency').length<=1){
+        alert('At least one Agency Admin account must remain.');
+        return;
+      }
+      state.users.splice(idx,1);
+      renderUsers(); renderDemoAccounts();
+    };
+  });
+}
+document.getElementById('newUserRole').addEventListener('change', e=>{
+  document.getElementById('newUserDealerField').style.display = e.target.value==='dealer' ? 'block' : 'none';
+});
+document.getElementById('newUserCreate').addEventListener('click', ()=>{
+  const displayName = document.getElementById('newUserName').value.trim();
+  const username = document.getElementById('newUserUsername').value.trim().toLowerCase();
+  const password = document.getElementById('newUserPassword').value;
+  const role = document.getElementById('newUserRole').value;
+  const clientId = role==='dealer' ? document.getElementById('newUserDealer').value : null;
+  const errEl = document.getElementById('newUserError');
+  if(!displayName || !username || !password){ errEl.textContent = 'Display name, username, and password are all required.'; return; }
+  if(state.users.some(u=>u.username.toLowerCase()===username)){ errEl.textContent = 'That username is already taken.'; return; }
+  errEl.textContent = '';
+  state.users.push({ username, password, role, clientId, displayName });
+  document.getElementById('newUserName').value = '';
+  document.getElementById('newUserUsername').value = '';
+  document.getElementById('newUserPassword').value = '';
+  renderUsers();
+  renderDemoAccounts();
+});
+
+/* =========================================================================
+   13. AUTH — login / logout / role gating (PROTOTYPE ONLY, see banner on User Management tab)
+   ========================================================================= */
+function renderDemoAccounts(){
+  document.getElementById('loginDemoList').innerHTML = state.users.map(u=>
+    `<div class="demo-row" data-u="${u.username}" data-p="${u.password}"><span>${u.username}</span><span class="mono">${u.password}</span></div>`
+  ).join('');
+  document.querySelectorAll('.demo-row').forEach(row=>{
+    row.onclick = ()=>{
+      document.getElementById('loginUsername').value = row.dataset.u;
+      document.getElementById('loginPassword').value = row.dataset.p;
+    };
+  });
+}
+function applyRoleUI(){
+  const user = state.currentUser;
+  if(!user) return;
+  const isAgency = user.role==='agency';
+  document.getElementById('whoAmI').textContent = `${user.displayName} · ${isAgency ? 'Agency Admin' : 'Dealer'}`;
+  document.getElementById('navPrimary').style.display = isAgency ? 'flex' : 'none';
+  document.getElementById('backToPortfolio').style.display = isAgency ? 'inline-block' : 'none';
+  document.querySelector('.crumb-sep').style.display = isAgency ? 'inline' : 'none';
+  const adminSubTab = document.querySelector('.tabs-sub .tab-btn[data-view="admin"]');
+  if(adminSubTab) adminSubTab.style.display = isAgency ? 'inline-block' : 'none';
+  populateClientSelect();
+}
+function loginAs(user){
+  state.currentUser = user;
+  if(user.role==='dealer') state.clientId = user.clientId;
+  applyRoleUI();
+  document.getElementById('loginScreen').style.display = 'none';
+  document.getElementById('appRoot').style.display = 'block';
+  renderAll();
+  activateTab(user.role==='dealer' ? 'overview' : 'portfolio');
+}
+function attemptLogin(){
+  const u = document.getElementById('loginUsername').value.trim().toLowerCase();
+  const p = document.getElementById('loginPassword').value;
+  const match = state.users.find(x=>x.username.toLowerCase()===u && x.password===p);
+  const errEl = document.getElementById('loginError');
+  if(!match){ errEl.textContent = 'Invalid username or password.'; return; }
+  errEl.textContent = '';
+  loginAs(match);
+}
+function logout(){
+  state.currentUser = null;
+  document.getElementById('loginUsername').value = '';
+  document.getElementById('loginPassword').value = '';
+  document.getElementById('loginError').textContent = '';
+  document.getElementById('appRoot').style.display = 'none';
+  document.getElementById('loginScreen').style.display = 'flex';
+}
+document.getElementById('loginBtn').addEventListener('click', attemptLogin);
+document.getElementById('loginUsername').addEventListener('keydown', e=>{ if(e.key==='Enter') attemptLogin(); });
+document.getElementById('loginPassword').addEventListener('keydown', e=>{ if(e.key==='Enter') attemptLogin(); });
+document.getElementById('logoutBtn').addEventListener('click', logout);
+
+/* =========================================================================
+   14. INIT
+   ========================================================================= */
+function renderAll(){
+  populateInvFilters();
+  renderPortfolio();
+  renderOverview();
+  renderTraffic();
+  renderInventory();
+  renderAdmin();
+  renderUsers();
+}
+renderAll();
+renderDemoAccounts();
+</script>
+</body>
+</html>

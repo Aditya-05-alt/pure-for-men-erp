@@ -1,0 +1,1496 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"/>
+  <title>SmartAnalytics — Project Documentation</title>
+  <style>
+    body { font-family: Segoe UI, Arial, sans-serif; font-size: 11pt; line-height: 1.45; color: #111; margin: 2cm; }
+    h1 { font-size: 22pt; border-bottom: 2px solid #2563eb; padding-bottom: 8px; page-break-before: always; }
+    h1:first-of-type { page-break-before: avoid; }
+    h2 { font-size: 16pt; color: #1e40af; margin-top: 24px; }
+    h3 { font-size: 13pt; color: #1e3a8a; margin-top: 18px; }
+    h4 { font-size: 11pt; margin-top: 14px; }
+    table { border-collapse: collapse; width: 100%; margin: 12px 0; font-size: 9pt; }
+    th, td { border: 1px solid #cbd5e1; padding: 6px 8px; text-align: left; vertical-align: top; }
+    th { background: #eff6ff; font-weight: 600; }
+    tr:nth-child(even) td { background: #f8fafc; }
+    code, pre { font-family: Consolas, monospace; font-size: 9pt; background: #f1f5f9; }
+    pre { padding: 10px; overflow-x: auto; border: 1px solid #e2e8f0; border-radius: 4px; }
+    li { margin: 4px 0; }
+    hr { border: none; border-top: 1px solid #e2e8f0; margin: 20px 0; }
+    p { margin: 8px 0; }
+    @media print { body { margin: 1.5cm; } h1,h2,h3 { page-break-after: avoid; } }
+  </style>
+</head>
+<body>
+<h1>SmartAnalytics — Full Project Documentation</h1>
+
+<p><strong>Project:</strong> <code>smartanalytics-app</code>  </p>
+<p><strong>Version:</strong> 0.1.0  </p>
+<p><strong>Last updated:</strong> July 2026  </p>
+<p><strong>Stack:</strong> Next.js 15 · React 19 · Supabase (Postgres + Auth + Edge Functions) · GA4 Data API · Tailwind CSS</p>
+
+<hr/>
+
+<h2>Table of Contents</h2>
+
+<p>1. [Executive Summary](#1-executive-summary)</p>
+<p>2. [Architecture Overview](#2-architecture-overview)</p>
+<p>3. [Repository Structure](#3-repository-structure)</p>
+<p>4. [Environment Variables](#4-environment-variables)</p>
+<p>5. [Authentication &amp; Authorization](#5-authentication--authorization)</p>
+<p>6. [Database Tables](#6-database-tables)</p>
+<p>7. [Database Functions &amp; RPCs](#7-database-functions--rpcs)</p>
+<p>8. [Edge Functions](#8-edge-functions)</p>
+<p>9. [Cron Jobs &amp; Schedules](#9-cron-jobs--schedules)</p>
+<p>10. [Data Pipelines](#10-data-pipelines)</p>
+<p>11. [Inventory System](#11-inventory-system)</p>
+<p>12. [Frontend Application](#12-frontend-application)</p>
+<p>13. [API Routes](#13-api-routes)</p>
+<p>14. [Key Library Modules](#14-key-library-modules)</p>
+<p>15. [Deployment Checklist](#15-deployment-checklist)</p>
+<p>16. [Troubleshooting](#16-troubleshooting)</p>
+<p>17. [File Index](#17-file-index)</p>
+
+<hr/>
+
+<h2>1. Executive Summary</h2>
+
+<p><strong>SmartAnalytics</strong> is a dealer analytics platform for automotive, RV, powersports, and marine dealerships. It combines:</p>
+
+<li><strong>Google Analytics 4 (GA4)</strong> page-view data</li>
+<li><strong>Hoot inventory</strong> feeds (primary inventory source)</li>
+<li><strong>Web scraping</strong> (fallback inventory for dealers without Hoot)</li>
+<li><strong>VDP classification</strong> (regex rules per dealer/CMS)</li>
+<li><strong>Inventory-enriched reporting</strong> (make, model, year, condition, location on VDP views)</li>
+<li><strong>Daily inventory snapshots</strong> and a dedicated <strong>Inventory Report</strong> dashboard</li>
+
+<p><strong>Primary user flows:</strong></p>
+
+<table><thead><tr>
+<th>User</th>
+<th>What they do</th>
+</tr></thead><tbody>
+<tr>
+<td>**Dealer**</td>
+<td>Sign in → pick dealer → view Overview, Inventory, Health</td>
+</tr>
+<tr>
+<td>**Superadmin**</td>
+<td>Admin login → manage dealers, VDP logics, run GA4/VDP pipeline, monitor daily sync</td>
+</tr>
+</tbody></table>
+
+<p><strong>Identity key:</strong> <code>smart_hoot_config.ga4_customer_id</code> = <code>client_id</code> in all data tables = dashboard <code>ga4CustomerId</code>.</p>
+
+<hr/>
+
+<h2>2. Architecture Overview</h2>
+
+<pre><code>
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                           EXTERNAL DATA SOURCES                              │
+├─────────────────────┬───────────────────────┬───────────────────────────────┤
+│   Google GA4 API    │   Hoot API / Feed     │   Dealer websites (scrap)     │
+└──────────┬──────────┴───────────┬───────────┴──────────────┬────────────────┘
+           │                      │                          │
+           ▼                      ▼                          ▼
+    smart_ga4_page_data   smart_hoot_inventory      smart_scrap_inventory
+           │                      │                          │
+           │ Step 2: VDP          │ Step 3 + Snapshot        │ Step 3 + Snapshot
+           │ filtration           │                          │
+           ▼                      ▼                          ▼
+    (classified pages)     smart_final_data          smart_*_inventory_daily
+           │                      │                          │
+           └──────────────────────┴──────────────────────────┘
+                                  │
+                                  ▼
+                    Next.js Dashboard (Overview, Inventory, Admin)
+</code></pre>
+
+<h3>High-level data lifecycle</h3>
+
+<p>1. <strong>Step 1 — GA4 sync:</strong> GA4 API → <code>smart_ga4_page_data</code> (page-grain facts)</p>
+<p>2. <strong>Step 2 — VDP filtration:</strong> Regex rules → classify pages (VDP/SRP/Home/Other)</p>
+<p>3. <strong>Step 3 — Final sync:</strong> Join pages + inventory → <code>smart_final_data</code></p>
+<p>4. <strong>Inventory snapshot:</strong> Copy live inventory → daily tables (<code>pull_date</code>, <code>sk</code>)</p>
+<p>5. <strong>Dashboard:</strong> RPCs read page/final/daily tables → charts, breakdowns, exports</p>
+
+<hr/>
+
+<h2>3. Repository Structure</h2>
+
+<pre><code>
+smartanalytics-app/
+├── public/                    # Static assets
+├── src/
+│   ├── app/                   # Next.js App Router (pages + API routes)
+│   ├── components/            # React UI components
+│   ├── hooks/                 # Custom React hooks
+│   ├── lib/                   # Business logic, API clients, pipeline
+│   └── middleware.js          # Route auth guards
+├── supabase/
+│   ├── migrations/            # Table DDL (run in SQL Editor)
+│   ├── rpc/                   # Postgres functions (run in SQL Editor)
+│   ├── functions/             # Deno Edge Functions
+│   ├── cron/                  # pg_cron schedule SQL
+│   └── scripts/               # One-off maintenance SQL
+├── workers/scrap-inventory/   # External scrap worker (Node.js)
+├── scripts/                   # Dev utilities
+├── __tests__/                 # Unit tests
+├── knowledge.md               # Technical KB (May 2026)
+├── Document.md                # This file
+└── package.json
+</code></pre>
+
+<hr/>
+
+<h2>4. Environment Variables</h2>
+
+<h3>Next.js app (`.env.local`)</h3>
+
+<table><thead><tr>
+<th>Variable</th>
+<th>Scope</th>
+<th>Required</th>
+<th>Purpose</th>
+</tr></thead><tbody>
+<tr>
+<td>`NEXT_PUBLIC_SUPABASE_URL`</td>
+<td>Browser + server</td>
+<td>Yes</td>
+<td>Supabase project URL</td>
+</tr>
+<tr>
+<td>`NEXT_PUBLIC_SUPABASE_ANON_KEY`</td>
+<td>Browser + server</td>
+<td>Yes</td>
+<td>Auth + client RPCs</td>
+</tr>
+<tr>
+<td>`SUPABASE_SERVICE_ROLE_KEY`</td>
+<td>Server only</td>
+<td>Admin features</td>
+<td>Pipeline, admin APIs</td>
+</tr>
+<tr>
+<td>`GCP_SERVICE_ACCOUNT_JSON_PATH`</td>
+<td>Server only</td>
+<td>Step 1</td>
+<td>Path to GA4 service account JSON</td>
+</tr>
+<tr>
+<td>`GCP_SERVICE_ACCOUNT_JSON`</td>
+<td>Server only</td>
+<td>Alt.</td>
+<td>Inline/base64 GA4 credentials</td>
+</tr>
+</tbody></table>
+
+<h3>Scrap worker (`workers/scrap-inventory/.env`)</h3>
+
+<table><thead><tr>
+<th>Variable</th>
+<th>Purpose</th>
+</tr></thead><tbody>
+<tr>
+<td>`SUPABASE_URL`</td>
+<td>Supabase URL</td>
+</tr>
+<tr>
+<td>`SUPABASE_SERVICE_ROLE_KEY`</td>
+<td>Call `upsert_scrap_inventory_batch`</td>
+</tr>
+<tr>
+<td>`SCRAP_CLIENT_ID`</td>
+<td>Optional single-dealer filter</td>
+</tr>
+<tr>
+<td>`SCRAP_REPORT_DATE`</td>
+<td>Optional `YYYY-MM-DD`</td>
+</tr>
+<tr>
+<td>`SCRAP_CONCURRENCY`</td>
+<td>Parallel dealers (default 2)</td>
+</tr>
+</tbody></table>
+
+<h3>Edge Functions (auto-injected by Supabase)</h3>
+
+<li><code>SUPABASE_URL</code></li>
+<li><code>SUPABASE_SERVICE_ROLE_KEY</code></li>
+
+<h3>Runtime modes</h3>
+
+<table><thead><tr>
+<th>Condition</th>
+<th>Behavior</th>
+</tr></thead><tbody>
+<tr>
+<td>Missing Supabase env</td>
+<td>Demo mode (`demo@smartanalytics.dev`)</td>
+</tr>
+<tr>
+<td>No service role</td>
+<td>Dashboard works; admin pipeline returns 503</td>
+</tr>
+<tr>
+<td>Full env</td>
+<td>All features enabled</td>
+</tr>
+</tbody></table>
+
+<hr/>
+
+<h2>5. Authentication &amp; Authorization</h2>
+
+<h3>Dealer auth (Supabase Auth)</h3>
+
+<li>Routes: <code>/login</code>, <code>/signup</code></li>
+<li>Middleware: <code>src/middleware.js</code> protects <code>/dashboard/*</code></li>
+<li>Session: Supabase cookies; inactivity timeout via <code>InactivityTimeout.jsx</code></li>
+
+<h3>Superadmin auth</h3>
+
+<li>Route: <code>/admin/login</code></li>
+<li>Cookie-based superadmin session (<code>src/lib/auth/superadmin.js</code>)</li>
+<li>Required for <code>/dashboard/admin/*</code> and admin API routes</li>
+
+<h3>Route protection</h3>
+
+<table><thead><tr>
+<th>Path</th>
+<th>Who can access</th>
+</tr></thead><tbody>
+<tr>
+<td>`/dashboard`</td>
+<td>Authenticated dealer</td>
+</tr>
+<tr>
+<td>`/dashboard/admin/*`</td>
+<td>Superadmin only</td>
+</tr>
+<tr>
+<td>`/api/admin/*`</td>
+<td>Superadmin + service role</td>
+</tr>
+<tr>
+<td>`/api/dashboard/*`</td>
+<td>Authenticated (server uses service role for RPCs)</td>
+</tr>
+</tbody></table>
+
+<hr/>
+
+<h2>6. Database Tables</h2>
+
+<h3>6.1 Core tables (pre-existing in Supabase)</h3>
+
+<table><thead><tr>
+<th>Table</th>
+<th>Primary key / grain</th>
+<th>Purpose</th>
+</tr></thead><tbody>
+<tr>
+<td>`smart_ga4_config`</td>
+<td>Per dealer</td>
+<td>GA4 property ID registry for Step 1</td>
+</tr>
+<tr>
+<td>`smart_hoot_config`</td>
+<td>Per dealer</td>
+<td>Dealer master: name, `ga4_customer_id`, `hoot_url`, `is_active`</td>
+</tr>
+<tr>
+<td>`smart_ga4_page_data`</td>
+<td>Per page + date + client</td>
+<td>GA4 page-grain facts after Step 1</td>
+</tr>
+<tr>
+<td>`smart_ga4_data`</td>
+<td>Per date + client</td>
+<td>Session/user totals (optional KPIs)</td>
+</tr>
+<tr>
+<td>`smart_vdp_logic`</td>
+<td>Per dealer rule</td>
+<td>VDP/SRP/home regex, `scrap_link`, `hoot_link`</td>
+</tr>
+<tr>
+<td>`smart_hoot_inventory`</td>
+<td>`sk`</td>
+<td>**Live** Hoot inventory (external sync)</td>
+</tr>
+<tr>
+<td>`smart_final_data`</td>
+<td>Per VDP row</td>
+<td>Inventory-enriched VDP facts (Step 3 output)</td>
+</tr>
+</tbody></table>
+
+<h3>6.2 Tables from `supabase/migrations/`</h3>
+
+<table><thead><tr>
+<th>Table</th>
+<th>Migration</th>
+<th>Purpose</th>
+</tr></thead><tbody>
+<tr>
+<td>`smart_scrap_inventory`</td>
+<td>`smart_scrap_inventory.sql`</td>
+<td>Live scrap inventory; PK `sk`</td>
+</tr>
+<tr>
+<td>`smart_scrap_day_complete`</td>
+<td>`smart_scrap_inventory.sql`</td>
+<td>Scrape completion marker per dealer/day</td>
+</tr>
+<tr>
+<td>`smart_scrap_run_log`</td>
+<td>`smart_scrap_inventory_source.sql`</td>
+<td>Scrape run audit</td>
+</tr>
+<tr>
+<td>`smart_scrap_data`</td>
+<td>`smart_scrap_data.sql`</td>
+<td>Alternate scrap mirror</td>
+</tr>
+<tr>
+<td>`smart_dealer_locations`</td>
+<td>`smart_dealer_locations.sql`</td>
+<td>Configured store locations</td>
+</tr>
+<tr>
+<td>`smart_hoot_inventory_daily`</td>
+<td>`smart_hoot_inventory_daily.sql`</td>
+<td>Daily Hoot snapshot; PK `(pull_date, sk)`</td>
+</tr>
+<tr>
+<td>`smart_hoot_inventory_daily_log`</td>
+<td>`smart_hoot_inventory_daily.sql`</td>
+<td>Hoot snapshot audit log</td>
+</tr>
+<tr>
+<td>`smart_scrap_inventory_daily`</td>
+<td>`smart_scrap_inventory_daily.sql`</td>
+<td>Daily scrap snapshot; PK `(pull_date, sk)`</td>
+</tr>
+<tr>
+<td>`smart_scrap_inventory_daily_log`</td>
+<td>`smart_scrap_inventory_daily.sql`</td>
+<td>Scrap snapshot audit log</td>
+</tr>
+<tr>
+<td>`smart_user_login_sts`</td>
+<td>`smart_user_login_sts.sql`</td>
+<td>Login/session telemetry</td>
+</tr>
+<tr>
+<td>`smart_ga4_page_data_backup`</td>
+<td>`smart_ga4_page_data_backup.sql`</td>
+<td>Backup table for migrations</td>
+</tr>
+</tbody></table>
+
+<h3>6.3 Column migrations</h3>
+
+<table><thead><tr>
+<th>Table</th>
+<th>Migration</th>
+<th>Columns added</th>
+</tr></thead><tbody>
+<tr>
+<td>`smart_hoot_config`</td>
+<td>`smart_hoot_config_pipeline_flags.sql`</td>
+<td>`account_name`, `ga4_filter_enabled`, `final_vdp_enabled`</td>
+</tr>
+<tr>
+<td>`smart_hoot_config`</td>
+<td>`smart_scrap_inventory_source.sql`</td>
+<td>`inventory_source` (`hoot` \</td>
+<td>`scrap`)</td>
+</tr>
+</tbody></table>
+
+<h3>6.4 Key columns — `smart_hoot_inventory_daily`</h3>
+
+<table><thead><tr>
+<th>Column</th>
+<th>Type</th>
+<th>Description</th>
+</tr></thead><tbody>
+<tr>
+<td>`pull_date`</td>
+<td>date</td>
+<td>Business day captured (NOT `last_seen` date)</td>
+</tr>
+<tr>
+<td>`sk`</td>
+<td>text</td>
+<td>Hoot stock key</td>
+</tr>
+<tr>
+<td>`vin`, `make`, `model`, `year`</td>
+<td>text</td>
+<td>Vehicle attributes</td>
+</tr>
+<tr>
+<td>`price`, `msrp`</td>
+<td>numeric</td>
+<td>Pricing</td>
+</tr>
+<tr>
+<td>`condition`, `type_`, `location`</td>
+<td>text</td>
+<td>Classification</td>
+</tr>
+<tr>
+<td>`first_seen`, `last_seen`</td>
+<td>timestamptz</td>
+<td>Hoot feed timestamps</td>
+</tr>
+<tr>
+<td>`customer_name`, `advertiser`</td>
+<td>text</td>
+<td>Dealer linkage</td>
+</tr>
+<tr>
+<td>`snapshotted_at`</td>
+<td>timestamptz</td>
+<td>When row was copied to daily table</td>
+</tr>
+</tbody></table>
+
+<h3>6.5 Key columns — `smart_scrap_inventory_daily`</h3>
+
+<p>Same as hoot daily plus:</p>
+
+<table><thead><tr>
+<th>Column</th>
+<th>Description</th>
+</tr></thead><tbody>
+<tr>
+<td>`customer_id`</td>
+<td>GA4 customer id (matches `ga4_customer_id`)</td>
+</tr>
+</tbody></table>
+
+<hr/>
+
+<h2>7. Database Functions &amp; RPCs</h2>
+
+<p>Deploy all SQL files in <code>supabase/rpc/</code> via <strong>Supabase SQL Editor</strong> (run full file).</p>
+
+<h3>7.1 Admin VDP pipeline</h3>
+
+<table><thead><tr>
+<th>Function</th>
+<th>File</th>
+<th>Purpose</th>
+</tr></thead><tbody>
+<tr>
+<td>`apply_vdp_filtration_range`</td>
+<td>`apply_vdp_filtration_range.sql`</td>
+<td>**Admin Step 2** — classify pages in exact date range</td>
+</tr>
+<tr>
+<td>`apply_vdp_filtration`</td>
+<td>`apply_vdp_filtration.sql`</td>
+<td>**Cron Step 2** — lookback from today</td>
+</tr>
+<tr>
+<td>`build_smart_final_data`</td>
+<td>`build_smart_final_data.sql`</td>
+<td>**Step 3 (Hoot)** — rebuild `smart_final_data`</td>
+</tr>
+<tr>
+<td>`build_smart_final_data_scrap`</td>
+<td>`build_smart_final_data_scrap.sql`</td>
+<td>**Step 3 (Scrap)** — scrap inventory path</td>
+</tr>
+<tr>
+<td>`build_date_wise_ga4_data`</td>
+<td>`build_date_wise_ga4_data.sql`</td>
+<td>Daily GA4 view totals</td>
+</tr>
+<tr>
+<td>`build_date_wise_final_data`</td>
+<td>`build_date_wise_final_data.sql`</td>
+<td>Daily VDP views with filters</td>
+</tr>
+<tr>
+<td>`build_date_wise_hoot_match`</td>
+<td>`build_date_wise_hoot_match.sql`</td>
+<td>Matched vs non-matched Hoot URL views</td>
+</tr>
+<tr>
+<td>`build_pipeline_range_views`</td>
+<td>`build_pipeline_range_views.sql`</td>
+<td>Pipeline per-day coverage stats</td>
+</tr>
+<tr>
+<td>`build_vdp_logics`</td>
+<td>`build_vdp_logics.sql`</td>
+<td>List/filter VDP logic rules</td>
+</tr>
+<tr>
+<td>`get_scrap_dealers_for_sync`</td>
+<td>`get_scrap_dealers_for_sync.sql`</td>
+<td>Dealers with scrap enabled</td>
+</tr>
+<tr>
+<td>`upsert_scrap_inventory_batch`</td>
+<td>`upsert_scrap_inventory_batch.sql`</td>
+<td>Batch upsert from scrap worker</td>
+</tr>
+</tbody></table>
+
+<h3>7.2 Dashboard breakdowns &amp; exports</h3>
+
+<table><thead><tr>
+<th>Function</th>
+<th>File</th>
+</tr></thead><tbody>
+<tr>
+<td>`get_ga4_channel_breakdown`</td>
+<td>`get_ga4_channel_breakdown.sql`</td>
+</tr>
+<tr>
+<td>`get_top_campaigns`</td>
+<td>`get_top_campaigns.sql`</td>
+</tr>
+<tr>
+<td>`get_location_breakdown`</td>
+<td>`get_location_breakdown.sql`</td>
+</tr>
+<tr>
+<td>`get_dealer_location_breakdown`</td>
+<td>`get_dealer_location_breakdown.sql`</td>
+</tr>
+<tr>
+<td>`get_make_breakdown`</td>
+<td>`get_make_breakdown.sql`</td>
+</tr>
+<tr>
+<td>`get_model_breakdown`</td>
+<td>`get_model_breakdown.sql`</td>
+</tr>
+<tr>
+<td>`get_year_breakdown`</td>
+<td>`get_year_breakdown.sql`</td>
+</tr>
+<tr>
+<td>`get_condition_breakdown`</td>
+<td>`get_condition_breakdown.sql`</td>
+</tr>
+<tr>
+<td>`get_type_breakdown`</td>
+<td>`get_type_breakdown.sql`</td>
+</tr>
+<tr>
+<td>`get_vdp_filter_options`</td>
+<td>`get_vdp_filter_options.sql`</td>
+</tr>
+<tr>
+<td>`get_vdp_views_total`</td>
+<td>`get_vdp_views_total.sql`</td>
+</tr>
+<tr>
+<td>`get_vdp_views_by_date`</td>
+<td>`get_vdp_views_by_date.sql`</td>
+</tr>
+<tr>
+<td>`get_all_dealers_channel_matrix`</td>
+<td>`get_all_dealers_channel_matrix.sql`</td>
+</tr>
+<tr>
+<td>`get_vdp_export_by_channel`</td>
+<td>`get_vdp_export_by_channel.sql`</td>
+</tr>
+<tr>
+<td>`get_vdp_export_by_location`</td>
+<td>`get_vdp_export_by_location.sql`</td>
+</tr>
+<tr>
+<td>`get_vdp_export_by_make`</td>
+<td>`get_vdp_export_by_make.sql`</td>
+</tr>
+<tr>
+<td>`get_vdp_export_by_model`</td>
+<td>`get_vdp_export_by_model.sql`</td>
+</tr>
+<tr>
+<td>`get_vdp_export_by_condition`</td>
+<td>`get_vdp_export_by_condition.sql`</td>
+</tr>
+<tr>
+<td>`get_all_tab_export`</td>
+<td>`get_all_tab_export.sql`</td>
+</tr>
+</tbody></table>
+
+<h3>7.3 Inventory snapshot &amp; report</h3>
+
+<table><thead><tr>
+<th>Function</th>
+<th>File</th>
+<th>Purpose</th>
+</tr></thead><tbody>
+<tr>
+<td>`snapshot_hoot_inventory_daily`</td>
+<td>`snapshot_inventory_daily.sql`</td>
+<td>Insert-only: live hoot → daily</td>
+</tr>
+<tr>
+<td>`snapshot_scrap_inventory_daily`</td>
+<td>`snapshot_inventory_daily.sql`</td>
+<td>Insert-only: live scrap → daily</td>
+</tr>
+<tr>
+<td>`snapshot_all_inventory_daily`</td>
+<td>`snapshot_inventory_daily.sql`</td>
+<td>Both sources</td>
+</tr>
+<tr>
+<td>`run_daily_inventory_snapshot`</td>
+<td>`snapshot_inventory_daily.sql`</td>
+<td>Orchestrator (IST date, skip-if-complete)</td>
+</tr>
+<tr>
+<td>`backfill_hoot_inventory_daily`</td>
+<td>`smart_hoot_inventory_daily.sql`</td>
+<td>Date-range backfill</td>
+</tr>
+<tr>
+<td>`backfill_scrap_inventory_daily`</td>
+<td>`smart_scrap_inventory_daily.sql`</td>
+<td>Date-range backfill</td>
+</tr>
+<tr>
+<td>`get_inventory_report`</td>
+<td>`get_inventory_report.sql`</td>
+<td>Full inventory report JSON</td>
+</tr>
+<tr>
+<td>`con_inv_breakdown`</td>
+<td>`con_inv_breakdown.sql`</td>
+<td>Condition breakdown</td>
+</tr>
+<tr>
+<td>`loc_inv_breakdown`</td>
+<td>`loc_inv_breakdown.sql`</td>
+<td>Location breakdown</td>
+</tr>
+</tbody></table>
+
+<h3>7.4 Helpers &amp; triggers</h3>
+
+<table><thead><tr>
+<th>Function</th>
+<th>File</th>
+<th>Purpose</th>
+</tr></thead><tbody>
+<tr>
+<td>`extract_vin_from_text`</td>
+<td>`extract_vin_from_text.sql`</td>
+<td>VIN extraction</td>
+</tr>
+<tr>
+<td>`page_path_matches_vdp_logic`</td>
+<td>`page_path_matches_vdp_logic.sql`</td>
+<td>Regex match helper</td>
+</tr>
+<tr>
+<td>`inventory_matches_ga4_page_path`</td>
+<td>`inventory_matches_ga4_page_path.sql`</td>
+<td>URL/path inventory match</td>
+</tr>
+<tr>
+<td>`smart_scrap_inventory_touch_last_seen`</td>
+<td>`smart_scrap_inventory.sql`</td>
+<td>Trigger: update `last_seen` on scrap update</td>
+</tr>
+</tbody></table>
+
+<h3>7.5 RPCs used but not in repo (deploy separately)</h3>
+
+<table><thead><tr>
+<th>Function</th>
+<th>Used by</th>
+</tr></thead><tbody>
+<tr>
+<td>`get_ga4_overview`</td>
+<td>Overview dashboard</td>
+</tr>
+<tr>
+<td>`get_ga4_user_totals`</td>
+<td>Overview KPIs (optional)</td>
+</tr>
+<tr>
+<td>`next_dealer_to_sync`</td>
+<td>Legacy edge sync</td>
+</tr>
+<tr>
+<td>`apply_top_pages`</td>
+<td>Legacy session-grain sync</td>
+</tr>
+</tbody></table>
+
+<h3>7.6 `get_inventory_report` — detailed behavior</h3>
+
+<p><strong>Signature:</strong></p>
+<pre><code>
+get_inventory_report(
+  p_client_id    text,      -- NULL / '' / '__all_dealer__' = all dealers
+  p_report_date  date,       -- exact pull_date
+  p_types        text[],
+  p_makes        text[],
+  p_models       text[],
+  p_locations    text[],
+  p_years        integer[],
+  p_condition    text         -- BOTH | NEW | USED
+)
+</code></pre>
+
+<p><strong>Data sources:</strong></p>
+<li><code>smart_hoot_inventory_daily</code> — hoot dealers</li>
+<li><code>smart_scrap_inventory_daily</code> — scrap dealers / fallback</li>
+
+<p><strong>Dealer routing (per dealer):</strong></p>
+<p>1. <code>hoot_link</code> in VDP logic → hoot</p>
+<p>2. <code>scrap_link = on</code> or URL → scrap</p>
+<p>3. <code>hoot_url</code> or hoot daily rows → hoot</p>
+<p>4. scrap daily rows → scrap</p>
+<p>5. default → scrap</p>
+
+<p><strong>Hoot freshness rule:</strong></p>
+<li><code>last_seen</code> required within <strong>24 hours</strong> of <code>pull_date</code> (IST)</li>
+<li><strong>Today:</strong> <code>last_seen &gt;= now() - 24 hours</code></li>
+<li><strong>Past dates:</strong> <code>last_seen</code> on that IST calendar day</li>
+<li>Stale rows stay in DB but are <strong>hidden</strong> from report</li>
+
+<p><strong>Scrap:</strong> all rows for <code>pull_date</code> + dealer match (no <code>last_seen</code> filter)</p>
+
+<p><strong>Unit grain:</strong> one row per <code>(dealer, sk)</code> — matches Hoot API grain</p>
+
+<p><strong>Value:</strong> <code>COALESCE(NULLIF(price,0), NULLIF(msrp,0), 0)</code></p>
+
+<hr/>
+
+<h2>8. Edge Functions</h2>
+
+<table><thead><tr>
+<th>Function</th>
+<th>Path</th>
+<th>RPC called</th>
+<th>Schedule</th>
+</tr></thead><tbody>
+<tr>
+<td>`smart-master-sync`</td>
+<td>`supabase/functions/smart-master-sync/`</td>
+<td>`build_smart_final_data`</td>
+<td>Hoot Step 3 cron</td>
+</tr>
+<tr>
+<td>`smart-master-sync-scrap`</td>
+<td>`supabase/functions/smart-master-sync-scrap/`</td>
+<td>`get_scrap_dealers_for_sync`, `build_smart_final_data_scrap`</td>
+<td>9–10 AM IST</td>
+</tr>
+<tr>
+<td>`inventory-daily-snapshot`</td>
+<td>`supabase/functions/inventory-daily-snapshot/`</td>
+<td>`run_daily_inventory_snapshot`</td>
+<td>10:30–11 AM IST</td>
+</tr>
+</tbody></table>
+
+<p><strong>Deploy:</strong></p>
+<pre><code>
+supabase functions deploy smart-master-sync
+supabase functions deploy smart-master-sync-scrap
+supabase functions deploy inventory-daily-snapshot
+</code></pre>
+
+<p><strong>Manual invoke (inventory snapshot):</strong></p>
+<pre><code>
+POST /functions/v1/inventory-daily-snapshot
+Body: { "pull_date": "2026-07-10", "skip_if_complete": false }
+</code></pre>
+
+<hr/>
+
+<h2>9. Cron Jobs &amp; Schedules</h2>
+
+<p>Requires <code>pg_cron</code> + <code>pg_net</code> in Supabase. Replace <code>__SERVICE_ROLE_KEY__</code> before running schedule SQL.</p>
+
+<table><thead><tr>
+<th>File</th>
+<th>Job</th>
+<th>UTC schedule</th>
+<th>IST window</th>
+<th>Target</th>
+</tr></thead><tbody>
+<tr>
+<td>`smart-master-sync-scrap.schedule.sql`</td>
+<td>`smart-master-sync-scrap`</td>
+<td>`30,45 3 * * *`</td>
+<td>9:00–9:15 AM</td>
+<td>Scrap Step 3</td>
+</tr>
+<tr>
+<td>`smart-master-sync-scrap.schedule.sql`</td>
+<td>`smart-master-sync-scrap-2`</td>
+<td>`0,15,30 4 * * *`</td>
+<td>9:30–10:00 AM</td>
+<td>Scrap Step 3 retry</td>
+</tr>
+<tr>
+<td>`inventory-daily-snapshot.schedule.sql`</td>
+<td>`inventory-daily-snapshot`</td>
+<td>`0,15 5 * * *`</td>
+<td>10:30–10:45 AM</td>
+<td>Daily inventory snapshot</td>
+</tr>
+<tr>
+<td>`inventory-daily-snapshot.schedule.sql`</td>
+<td>`inventory-daily-snapshot-2`</td>
+<td>`30 5 * * *`</td>
+<td>11:00 AM</td>
+<td>Snapshot retry</td>
+</tr>
+</tbody></table>
+
+<p><strong>External cron (not in repo):</strong></p>
+<li>Hoot inventory feed → <code>smart_hoot_inventory</code></li>
+<li><code>workers/scrap-inventory</code> — daily ~6 AM</li>
+
+<hr/>
+
+<h2>10. Data Pipelines</h2>
+
+<h3>10.1 GA4 → Page data (Step 1)</h3>
+
+<pre><code>
+POST /api/admin/pipeline/sync-page
+  → ga4PageSync.js (GCP credentials)
+  → smart_ga4_page_data
+</code></pre>
+
+<p><strong>Key fields:</strong> <code>page_path</code>, <code>page_location</code>, <code>views</code>, <code>channel</code>, <code>report_date</code>, <code>client_id</code></p>
+
+<h3>10.2 VDP filtration (Step 2)</h3>
+
+<pre><code>
+POST /api/admin/pipeline/filtration
+  → apply_vdp_filtration_range(client_id, from, to)
+  → Updates smart_ga4_page_data: vdp_conditions, ga4_page_type, year, cms
+</code></pre>
+
+<p>Uses <code>smart_vdp_logic</code> regex patterns per dealer.</p>
+
+<h3>10.3 Final VDP sync (Step 3)</h3>
+
+<pre><code>
+POST /api/admin/pipeline/final-sync
+  → inventoryResolve.js picks hoot vs scrap RPC
+  → build_smart_final_data OR build_smart_final_data_scrap
+  → smart_final_data
+</code></pre>
+
+<p><strong>Inventory resolution priority</strong> (<code>inventoryResolve.js</code>):</p>
+<p>1. <code>hoot_link</code> → hoot RPC</p>
+<p>2. scrap link or scrap inventory rows → scrap RPC</p>
+<p>3. <code>hoot_url</code> or hoot inventory → hoot RPC</p>
+<p>4. default → scrap RPC</p>
+
+<h3>10.4 Scrap sync</h3>
+
+<pre><code>
+workers/scrap-inventory/run.mjs (cron)
+  → get_scrap_dealers_for_sync
+  → scrape dealer list pages
+  → upsert_scrap_inventory_batch
+  → smart_scrap_inventory
+</code></pre>
+
+<h3>10.5 Inventory daily snapshot</h3>
+
+<pre><code>
+pg_cron → inventory-daily-snapshot edge
+  → run_daily_inventory_snapshot(IST today, skip_if_complete)
+  → snapshot_hoot_inventory_daily (INSERT only, ON CONFLICT DO NOTHING)
+  → snapshot_scrap_inventory_daily
+  → smart_hoot_inventory_daily + smart_scrap_inventory_daily
+</code></pre>
+
+<p><strong>Re-run after deleting data:</strong></p>
+<pre><code>
+DELETE FROM smart_hoot_inventory_daily_log WHERE pull_date = '2026-07-10';
+DELETE FROM smart_scrap_inventory_daily_log WHERE pull_date = '2026-07-10';
+SELECT public.run_daily_inventory_snapshot(DATE '2026-07-10', false);
+</code></pre>
+
+<hr/>
+
+<h2>11. Inventory System</h2>
+
+<h3>11.1 Tables flow</h3>
+
+<pre><code>
+smart_hoot_inventory (live)     smart_scrap_inventory (live)
+         │                                │
+         ▼                                ▼
+smart_hoot_inventory_daily      smart_scrap_inventory_daily
+  (pull_date, sk)                 (pull_date, sk)
+         │                                │
+         └────────────┬───────────────────┘
+                      ▼
+            get_inventory_report RPC
+                      ▼
+            /dashboard/inventory UI
+</code></pre>
+
+<h3>11.2 Frontend inventory report</h3>
+
+<table><thead><tr>
+<th>Module</th>
+<th>Purpose</th>
+</tr></thead><tbody>
+<tr>
+<td>`InventoryReportContext.jsx`</td>
+<td>State: date, filters, compare mode</td>
+</tr>
+<tr>
+<td>`inventoryReport.js`</td>
+<td>Fetch + exact date policy</td>
+</tr>
+<tr>
+<td>`inventoryReportApi.js`</td>
+<td>Calls `get_inventory_report` RPC</td>
+</tr>
+<tr>
+<td>`inventoryReportNormalize.js`</td>
+<td>Maps RPC JSON → UI shape</td>
+</tr>
+<tr>
+<td>`InventoryReportFilters.jsx`</td>
+<td>Filter bar (type, make, location, condition)</td>
+</tr>
+<tr>
+<td>`InventoryBreakdownBlock.jsx`</td>
+<td>Donut/bar breakdowns + compare</td>
+</tr>
+<tr>
+<td>`InventoryList.jsx`</td>
+<td>Unit list table</td>
+</tr>
+</tbody></table>
+
+<p><strong>Exact date policy:</strong> If <code>meta.pullDate !== requestedDate</code>, UI shows zero (no fallback to older snapshot).</p>
+
+<h3>11.3 Useful SQL queries</h3>
+
+<p><strong>Run snapshot (IST today):</strong></p>
+<pre><code>
+SELECT * FROM public.run_daily_inventory_snapshot(
+  (timezone('Asia/Kolkata', now()))::date,
+  false
+);
+</code></pre>
+
+<p><strong>Count per pull_date:</strong></p>
+<pre><code>
+SELECT pull_date, COUNT(*) FROM public.smart_hoot_inventory_daily
+GROUP BY pull_date ORDER BY pull_date DESC LIMIT 14;
+</code></pre>
+
+<p><strong>RPC unit count:</strong></p>
+<pre><code>
+SELECT public.get_inventory_report(NULL, DATE '2026-07-10');
+</code></pre>
+
+<hr/>
+
+<h2>12. Frontend Application</h2>
+
+<h3>12.1 Routes</h3>
+
+<table><thead><tr>
+<th>Route</th>
+<th>Page</th>
+<th>Access</th>
+</tr></thead><tbody>
+<tr>
+<td>`/login`</td>
+<td>Dealer sign-in</td>
+<td>Public</td>
+</tr>
+<tr>
+<td>`/signup`</td>
+<td>Dealer sign-up</td>
+<td>Public</td>
+</tr>
+<tr>
+<td>`/admin/login`</td>
+<td>Superadmin login</td>
+<td>Public</td>
+</tr>
+<tr>
+<td>`/dashboard`</td>
+<td>Overview (GA4/VDP tabs)</td>
+<td>Dealer</td>
+</tr>
+<tr>
+<td>`/dashboard/inventory`</td>
+<td>Inventory report</td>
+<td>Dealer</td>
+</tr>
+<tr>
+<td>`/dashboard/health`</td>
+<td>Portfolio health</td>
+<td>Dealer</td>
+</tr>
+<tr>
+<td>`/dashboard/attribution`</td>
+<td>Attribution (stub)</td>
+<td>Dealer</td>
+</tr>
+<tr>
+<td>`/dashboard/local`</td>
+<td>Local intel</td>
+<td>Dealer</td>
+</tr>
+<tr>
+<td>`/dashboard/admin/pipeline`</td>
+<td>3-step pipeline</td>
+<td>Superadmin</td>
+</tr>
+<tr>
+<td>`/dashboard/admin/dealers`</td>
+<td>Dealer CRUD</td>
+<td>Superadmin</td>
+</tr>
+<tr>
+<td>`/dashboard/admin/vdp-logics`</td>
+<td>VDP regex rules</td>
+<td>Superadmin</td>
+</tr>
+<tr>
+<td>`/dashboard/admin/daily-sync`</td>
+<td>Daily sync matrix</td>
+<td>Superadmin</td>
+</tr>
+<tr>
+<td>`/dashboard/admin/date-wise-views`</td>
+<td>GA4 date-wise report</td>
+<td>Superadmin</td>
+</tr>
+<tr>
+<td>`/dashboard/admin/ga4-daily`</td>
+<td>GA4 daily panel</td>
+<td>Superadmin</td>
+</tr>
+</tbody></table>
+
+<h3>12.2 React contexts</h3>
+
+<table><thead><tr>
+<th>Context</th>
+<th>File</th>
+<th>Role</th>
+</tr></thead><tbody>
+<tr>
+<td>`ClientContext`</td>
+<td>`ClientContext.jsx`</td>
+<td>Active dealer picker</td>
+</tr>
+<tr>
+<td>`OverviewDataContext`</td>
+<td>`OverviewDataContext.jsx`</td>
+<td>Overview tabs, dates, filters</td>
+</tr>
+<tr>
+<td>`AllDealerMatrixContext`</td>
+<td>`AllDealerMatrixContext.jsx`</td>
+<td>All-dealers channel matrix</td>
+</tr>
+<tr>
+<td>`InventoryReportContext`</td>
+<td>`InventoryReportContext.jsx`</td>
+<td>Inventory report state</td>
+</tr>
+<tr>
+<td>`ThemeProvider`</td>
+<td>`ThemeProvider.jsx`</td>
+<td>Light/dark theme</td>
+</tr>
+</tbody></table>
+
+<h3>12.3 Overview dashboard tabs</h3>
+
+<table><thead><tr>
+<th>Tab</th>
+<th>Data source</th>
+<th>Filters</th>
+</tr></thead><tbody>
+<tr>
+<td>All</td>
+<td>`smart_ga4_page_data`</td>
+<td>None</td>
+</tr>
+<tr>
+<td>SRP</td>
+<td>`smart_ga4_page_data`</td>
+<td>`ga4_page_type = SRP`</td>
+</tr>
+<tr>
+<td>Home</td>
+<td>`smart_ga4_page_data`</td>
+<td>`ga4_page_type = Home`</td>
+</tr>
+<tr>
+<td>Other</td>
+<td>`smart_ga4_page_data`</td>
+<td>Remaining types</td>
+</tr>
+<tr>
+<td>VDP</td>
+<td>`smart_final_data`</td>
+<td>Make, model, year, condition, location, type</td>
+</tr>
+</tbody></table>
+
+<hr/>
+
+<h2>13. API Routes</h2>
+
+<h3>Dashboard (`/api/dashboard/*`)</h3>
+
+<table><thead><tr>
+<th>Method</th>
+<th>Route</th>
+<th>RPC / action</th>
+</tr></thead><tbody>
+<tr>
+<td>GET</td>
+<td>`/overview`</td>
+<td>`get_ga4_overview`, `get_ga4_user_totals`</td>
+</tr>
+<tr>
+<td>GET</td>
+<td>`/channel-breakdown`</td>
+<td>`get_ga4_channel_breakdown`</td>
+</tr>
+<tr>
+<td>GET</td>
+<td>`/location-breakdown`</td>
+<td>`get_location_breakdown`</td>
+</tr>
+<tr>
+<td>GET</td>
+<td>`/top-campaigns`</td>
+<td>`get_top_campaigns`</td>
+</tr>
+<tr>
+<td>GET</td>
+<td>`/vdp-daily`</td>
+<td>`build_date_wise_final_data`</td>
+</tr>
+<tr>
+<td>GET</td>
+<td>`/vdp-filter-options`</td>
+<td>`get_vdp_filter_options`</td>
+</tr>
+<tr>
+<td>GET</td>
+<td>`/vdp-export`</td>
+<td>5× export RPCs → XLSX</td>
+</tr>
+<tr>
+<td>GET</td>
+<td>`/all-export`</td>
+<td>`get_all_tab_export`</td>
+</tr>
+<tr>
+<td>GET</td>
+<td>`/all-dealers-channel-matrix`</td>
+<td>`get_all_dealers_channel_matrix`</td>
+</tr>
+</tbody></table>
+
+<h3>Admin (`/api/admin/*`)</h3>
+
+<table><thead><tr>
+<th>Method</th>
+<th>Route</th>
+<th>Action</th>
+</tr></thead><tbody>
+<tr>
+<td>POST</td>
+<td>`/login`</td>
+<td>Superadmin session</td>
+</tr>
+<tr>
+<td>GET/POST</td>
+<td>`/dealers`</td>
+<td>Dealer CRUD</td>
+</tr>
+<tr>
+<td>PATCH/DELETE</td>
+<td>`/dealers/[id]`</td>
+<td>Update/delete dealer</td>
+</tr>
+<tr>
+<td>GET</td>
+<td>`/pipeline/dealers`</td>
+<td>List pipeline dealers</td>
+</tr>
+<tr>
+<td>GET</td>
+<td>`/pipeline/stats`</td>
+<td>Pipeline coverage stats</td>
+</tr>
+<tr>
+<td>POST</td>
+<td>`/pipeline/sync-page`</td>
+<td>Step 1 GA4 sync</td>
+</tr>
+<tr>
+<td>POST</td>
+<td>`/pipeline/filtration`</td>
+<td>Step 2 VDP filtration</td>
+</tr>
+<tr>
+<td>POST</td>
+<td>`/pipeline/final-sync`</td>
+<td>Step 3 final sync</td>
+</tr>
+<tr>
+<td>GET/POST</td>
+<td>`/vdp-logics`</td>
+<td>VDP logic CRUD</td>
+</tr>
+<tr>
+<td>POST</td>
+<td>`/vdp-logics/upload`</td>
+<td>CSV bulk upload</td>
+</tr>
+<tr>
+<td>GET</td>
+<td>`/daily-sync`</td>
+<td>Daily sync status matrix</td>
+</tr>
+<tr>
+<td>GET</td>
+<td>`/ga4-matrix`</td>
+<td>GA4 matrix data</td>
+</tr>
+</tbody></table>
+
+<p><strong>Note:</strong> Inventory report calls <code>get_inventory_report</code> <strong>directly from browser</strong> via Supabase anon client (not a Next.js API route).</p>
+
+<hr/>
+
+<h2>14. Key Library Modules</h2>
+
+<h3>Supabase clients</h3>
+<li><code>src/lib/supabase/client.js</code> — browser anon</li>
+<li><code>src/lib/supabase/server.js</code> — server component</li>
+<li><code>src/lib/supabase/serviceRole.js</code> — admin/server RPCs</li>
+
+<h3>Pipeline</h3>
+<li><code>ga4PageSync.js</code> — Step 1 GA4 → Postgres</li>
+<li><code>pipelineRpc.js</code> — Steps 2–3 wrappers</li>
+<li><code>inventoryResolve.js</code> — hoot vs scrap Step 3</li>
+<li><code>scrapSync.js</code> — in-app scrap helper</li>
+<li><code>pipelineStats.js</code> — coverage stats</li>
+
+<h3>API / fetching</h3>
+<li><code>chunkedRpc.js</code> — date-chunked RPC (timeout safety)</li>
+<li><code>overviewFetch.js</code> — overview bundle</li>
+<li><code>dashboardApi.js</code> — dashboard RPC orchestration</li>
+<li><code>inventoryReportApi.js</code> — inventory RPC client</li>
+<li><code>vdpExport.js</code> / <code>allExport.js</code> — ExcelJS exports</li>
+
+<h3>Inventory</h3>
+<li><code>inventoryReport.js</code> — report orchestration</li>
+<li><code>inventoryReportFilters.js</code> — filter → RPC params</li>
+<li><code>inventoryReportNormalize.js</code> — RPC JSON → UI</li>
+<li><code>inventoryReportPrefs.js</code> — localStorage dates</li>
+
+<h3>GA4</h3>
+<li><code>channelGroups.js</code> — channel rollup definitions</li>
+<li><code>pageType.js</code> — page type → tab mapping</li>
+<li><code>dateRange.js</code> — calendar date helpers (local TZ safe)</li>
+
+<hr/>
+
+<h2>15. Deployment Checklist</h2>
+
+<h3>Initial Supabase setup</h3>
+
+<p>1. Run all <code>supabase/migrations/*.sql</code> in SQL Editor (order: base tables first if missing)</p>
+<p>2. Run all <code>supabase/rpc/*.sql</code> files</p>
+<p>3. Deploy edge functions (<code>smart-master-sync</code>, <code>smart-master-sync-scrap</code>, <code>inventory-daily-snapshot</code>)</p>
+<p>4. Run <code>supabase/cron/*.schedule.sql</code> (replace service role key)</p>
+<p>5. Deploy RPCs not in repo: <code>get_ga4_overview</code>, <code>get_ga4_user_totals</code></p>
+
+<h3>Daily operations (automatic)</h3>
+
+<table><thead><tr>
+<th>Time (IST)</th>
+<th>Job</th>
+<th>Result</th>
+</tr></thead><tbody>
+<tr>
+<td>~6 AM</td>
+<td>Scrap worker</td>
+<td>`smart_scrap_inventory` updated</td>
+</tr>
+<tr>
+<td>~9–10 AM</td>
+<td>Scrap Step 3 cron</td>
+<td>`smart_final_data` (scrap dealers)</td>
+</tr>
+<tr>
+<td>~10:30–11 AM</td>
+<td>Inventory snapshot cron</td>
+<td>`*_inventory_daily` for today</td>
+</tr>
+</tbody></table>
+
+<h3>Manual operations</h3>
+
+<pre><code>
+-- Snapshot today (force re-run)
+SELECT public.run_daily_inventory_snapshot(
+  (timezone('Asia/Kolkata', now()))::date,
+  false
+);
+
+-- Verify inventory report
+SELECT public.get_inventory_report(NULL, CURRENT_DATE);
+</code></pre>
+
+<h3>Next.js deploy</h3>
+
+<pre><code>
+npm install
+npm run build
+npm start
+</code></pre>
+
+<p>Set all env vars on hosting platform (Vercel/etc.).</p>
+
+<hr/>
+
+<h2>16. Troubleshooting</h2>
+
+<table><thead><tr>
+<th>Symptom</th>
+<th>Likely cause</th>
+<th>Fix</th>
+</tr></thead><tbody>
+<tr>
+<td>Inventory shows 0 for today</td>
+<td>No snapshot for IST today</td>
+<td>Run `run_daily_inventory_snapshot(..., false)`</td>
+</tr>
+<tr>
+<td>Snapshot skipped</td>
+<td>Log says `ok-insert-only`</td>
+<td>Delete log row or pass `false` for skip</td>
+</tr>
+<tr>
+<td>22K units (stale data)</td>
+<td>Freshness filter removed</td>
+<td>Re-deploy `get_inventory_report.sql` with 24h rule</td>
+</tr>
+<tr>
+<td>Hoot API ≠ report count</td>
+<td>`last_seen` filter excludes stale</td>
+<td>Expected; stale units hidden by design</td>
+</tr>
+<tr>
+<td>Scrap zero, hoot has data</td>
+<td>Dealer routed to hoot</td>
+<td>Check `smart_vdp_logic` + `hoot_url`</td>
+</tr>
+<tr>
+<td>Past date shows zero</td>
+<td>`last_seen` not on that day</td>
+<td>Normal for historical IST window</td>
+</tr>
+<tr>
+<td>Admin pipeline 503</td>
+<td>Missing `SUPABASE_SERVICE_ROLE_KEY`</td>
+<td>Add server env var</td>
+</tr>
+<tr>
+<td>GA4 sync fails</td>
+<td>GCP credentials</td>
+<td>Set `GCP_SERVICE_ACCOUNT_JSON_PATH`</td>
+</tr>
+</tbody></table>
+
+<hr/>
+
+<h2>17. File Index</h2>
+
+<table><thead><tr>
+<th>Topic</th>
+<th>Path</th>
+</tr></thead><tbody>
+<tr>
+<td>Technical KB</td>
+<td>`knowledge.md`</td>
+</tr>
+<tr>
+<td>Full documentation</td>
+<td>`Document.md`</td>
+</tr>
+<tr>
+<td>Inventory RPC</td>
+<td>`supabase/rpc/get_inventory_report.sql`</td>
+</tr>
+<tr>
+<td>Snapshot RPC</td>
+<td>`supabase/rpc/snapshot_inventory_daily.sql`</td>
+</tr>
+<tr>
+<td>Hoot daily migration</td>
+<td>`supabase/migrations/smart_hoot_inventory_daily.sql`</td>
+</tr>
+<tr>
+<td>Scrap daily migration</td>
+<td>`supabase/migrations/smart_scrap_inventory_daily.sql`</td>
+</tr>
+<tr>
+<td>Inventory UI</td>
+<td>`src/app/dashboard/inventory/page.jsx`</td>
+</tr>
+<tr>
+<td>Pipeline admin</td>
+<td>`src/components/dashboard/admin/DealerPipelineCard.jsx`</td>
+</tr>
+<tr>
+<td>Scrap worker</td>
+<td>`workers/scrap-inventory/run.mjs`</td>
+</tr>
+<tr>
+<td>Auth middleware</td>
+<td>`src/middleware.js`</td>
+</tr>
+<tr>
+<td>Env template</td>
+<td>`.env.example`</td>
+</tr>
+</tbody></table>
+
+<hr/>
+
+<p>*End of SmartAnalytics Project Documentation*</p>
+
+</body>
+</html>

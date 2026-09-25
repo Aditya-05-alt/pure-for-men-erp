@@ -1,0 +1,15 @@
+{
+  "name": "smartanalytics-scrap-inventory",
+  "version": "1.0.0",
+  "private": true,
+  "type": "module",
+  "description": "Daily scrap inventory worker for smart_scrap_data",
+  "scripts": {
+    "start": "node run.mjs",
+    "scrape": "node run.mjs",
+    "scrape:one": "node run.mjs --client-id"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.49.1"
+  }
+}

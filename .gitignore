@@ -1,0 +1,102 @@
+# ── Dependencies ─────────────────────────────────────────────────────────────
+/node_modules
+/.pnp
+.pnp.js
+.pnp.cjs
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/sdks
+!.yarn/versions
+.yarn/install-state.gz
+
+# ── Next.js ──────────────────────────────────────────────────────────────────
+/.next/
+/out/
+/build
+next-env.d.ts
+
+# ── Production / deploy ───────────────────────────────────────────────────────
+.vercel
+.netlify
+
+# ── Environment & secrets (NEVER commit) ─────────────────────────────────────
+.env
+.env.*
+!.env.example
+!.env*.example
+.env.local
+secrets/
+**/gcp-sa.json
+**/*-sa.json
+**/tidal-datum-*.json
+*service-account*.json
+*credentials*.json
+!package-lock.json
+!.env*.example
+.env.development.local
+.env.test.local
+.env.production.local
+
+# ── Logs & debug ─────────────────────────────────────────────────────────────
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# ── Testing & coverage ───────────────────────────────────────────────────────
+/coverage
+.nyc_output
+*.lcov
+.jest-cache
+
+# ── TypeScript / tooling caches ──────────────────────────────────────────────
+*.tsbuildinfo
+.turbo
+.eslintcache
+.stylelintcache
+.cache
+
+# ── OS & editors ─────────────────────────────────────────────────────────────
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+Desktop.ini
+
+.idea/
+*.swp
+*.swo
+*~
+.project
+.classpath
+.settings/
+
+# VS Code — keep shared settings optional; ignore personal/local only
+.vscode/*
+!.vscode/extensions.json
+!.vscode/settings.json
+
+# Cursor / AI local artifacts (do not publish)
+.cursor/
+*.cursor-chat
+agent-transcripts/
+
+# ── Misc ─────────────────────────────────────────────────────────────────────
+*.pem
+*.key
+*.p12
+*.pfx
+*.local
+
+# Optional local scratch files
+test.txt
+*.tmp
+*.temp

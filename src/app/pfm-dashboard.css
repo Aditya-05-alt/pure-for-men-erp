@@ -1,0 +1,406 @@
+/* ── Pure for Men dashboard theme (matches login) ───────── */
+.vdp-root.pfm-dash {
+  --pfm-ink: #0a0b0d;
+  --pfm-ink-2: #14161a;
+  --pfm-panel: #16181d;
+  --pfm-panel-2: #1c1f26;
+  --pfm-paper: #f1f5f9;
+  --pfm-muted: #94a3b8;
+  --pfm-line: rgba(241, 245, 249, 0.1);
+  --pfm-line-strong: rgba(241, 245, 249, 0.16);
+  --pfm-accent: #3b82f6;
+  --pfm-accent-hot: #60a5fa;
+
+  --vdp-bg: #0a0b0d;
+  --vdp-panel: var(--pfm-panel);
+  --vdp-ink: #f1f5f9;
+  --vdp-muted: #94a3b8;
+  --vdp-border: var(--pfm-line-strong);
+  --vdp-accent: #3b82f6;
+  --vdp-good: #4ade80;
+  --vdp-bad: #f87171;
+  --vdp-app: #0a0b0d;
+
+  position: relative;
+  min-height: 100vh;
+  background: var(--pfm-ink);
+  color: var(--pfm-paper);
+  overflow-x: hidden;
+  font-family: var(--font-pfm-ui), 'DM Sans', system-ui, sans-serif;
+}
+
+.vdp-root.pfm-dash .pfm-dash-atmosphere {
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  z-index: 0;
+  overflow: hidden;
+}
+
+.vdp-root.pfm-dash .pfm-dash-glow {
+  position: absolute;
+  border-radius: 50%;
+  filter: blur(90px);
+  opacity: 0.4;
+}
+
+.vdp-root.pfm-dash .pfm-dash-glow--a {
+  width: min(560px, 50vw);
+  height: min(560px, 50vw);
+  top: -8%;
+  left: -6%;
+  background: radial-gradient(circle, #1e3a8a 0%, transparent 70%);
+}
+
+.vdp-root.pfm-dash .pfm-dash-glow--b {
+  width: min(480px, 42vw);
+  height: min(480px, 42vw);
+  right: -8%;
+  bottom: 10%;
+  background: radial-gradient(circle, #0e7490 0%, transparent 72%);
+}
+
+.vdp-root.pfm-dash .pfm-dash-grid {
+  position: absolute;
+  inset: 0;
+  background-image:
+    linear-gradient(rgba(241, 245, 249, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(241, 245, 249, 0.03) 1px, transparent 1px);
+  background-size: 48px 48px;
+  mask-image: radial-gradient(ellipse at 50% 0%, black 15%, transparent 70%);
+}
+
+.vdp-root.pfm-dash > .vdp-top-chrome,
+.vdp-root.pfm-dash > .vdp-main {
+  position: relative;
+  z-index: 1;
+}
+
+/* Chrome / header */
+.vdp-root.pfm-dash .vdp-top-chrome {
+  background: rgba(10, 11, 13, 0.88);
+  backdrop-filter: blur(14px);
+  box-shadow: 0 1px 0 var(--pfm-line);
+}
+
+.vdp-root.pfm-dash .vdp-app-header {
+  background: transparent;
+  border-bottom: 1px solid var(--pfm-line);
+}
+
+.vdp-root.pfm-dash .vdp-app-header h1 {
+  font-family: var(--font-pfm-display), 'Bebas Neue', Impact, sans-serif;
+  font-size: 22px;
+  font-weight: 400;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+}
+
+.vdp-root.pfm-dash .vdp-sub {
+  color: var(--pfm-muted);
+}
+
+.vdp-root.pfm-dash .vdp-pill {
+  background: rgba(59, 130, 246, 0.12);
+  color: var(--pfm-accent-hot);
+  border-color: rgba(96, 165, 250, 0.35);
+}
+
+.vdp-root.pfm-dash a.vdp-pill--logout:hover {
+  background: rgba(59, 130, 246, 0.22);
+  color: #fff;
+}
+
+.vdp-root.pfm-dash .page-tabs {
+  background: transparent;
+  border-bottom-color: var(--pfm-line);
+}
+
+.vdp-root.pfm-dash .page-tabs .pt {
+  color: #94a3b8;
+}
+
+.vdp-root.pfm-dash .page-tabs .pt:hover {
+  color: #e2e8f0;
+}
+
+.vdp-root.pfm-dash .page-tabs .pt.active {
+  color: #fff;
+  border-bottom-color: var(--pfm-accent-hot);
+}
+
+.vdp-root.pfm-dash .vdp-date-range .dr-trigger {
+  background: var(--pfm-panel-2);
+  border-color: var(--pfm-line-strong);
+  color: #e2e8f0;
+}
+
+.vdp-root.pfm-dash .vdp-date-range .dr-trigger:hover {
+  border-color: var(--pfm-accent-hot);
+  color: #fff;
+}
+
+/* Toolbar / segments */
+.vdp-root.pfm-dash .vdp-toolbar {
+  background: rgba(22, 24, 29, 0.9);
+  border-color: var(--pfm-line-strong);
+  box-shadow: 0 12px 32px rgba(0, 0, 0, 0.25);
+}
+
+.vdp-root.pfm-dash .vdp-grp-lbl,
+.vdp-root.pfm-dash .vdp-period-hint {
+  color: var(--pfm-muted);
+}
+
+.vdp-root.pfm-dash .vdp-seg {
+  background: rgba(10, 11, 13, 0.55);
+  border: 1px solid var(--pfm-line);
+  border-radius: 9px;
+  padding: 2px;
+}
+
+.vdp-root.pfm-dash .vdp-seg button {
+  color: #94a3b8;
+  background: transparent;
+}
+
+.vdp-root.pfm-dash .vdp-seg button.active {
+  background: rgba(59, 130, 246, 0.2);
+  color: #fff;
+}
+
+.vdp-root.pfm-dash .vdp-chip-btn,
+.vdp-root.pfm-dash select.vdp-top-vehicles-select {
+  background: var(--pfm-panel-2);
+  border-color: var(--pfm-line-strong);
+  color: #e2e8f0;
+}
+
+.vdp-root.pfm-dash .vdp-chip-btn:hover {
+  background: rgba(59, 130, 246, 0.15);
+  border-color: var(--pfm-accent);
+  color: var(--pfm-accent-hot);
+}
+
+/* KPI + cards */
+.vdp-root.pfm-dash .vdp-kpi,
+.vdp-root.pfm-dash .vdp-card {
+  background: rgba(22, 24, 29, 0.92);
+  border-color: var(--pfm-line-strong);
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.28);
+  color: var(--pfm-paper);
+}
+
+.vdp-root.pfm-dash .vdp-kpi-lbl {
+  color: var(--pfm-muted);
+}
+
+.vdp-root.pfm-dash .vdp-kpi-val {
+  color: #fff;
+}
+
+.vdp-root.pfm-dash .vdp-card h3,
+.vdp-root.pfm-dash .vdp-cmp-head h3 {
+  color: #fff;
+}
+
+.vdp-root.pfm-dash .vdp-cardsub {
+  color: var(--pfm-muted);
+}
+
+.vdp-root.pfm-dash .vdp-chart-scroll {
+  background: transparent;
+  border-color: var(--pfm-line);
+}
+
+/* Tables */
+.vdp-root.pfm-dash .vdp-table th {
+  color: #94a3b8;
+  border-bottom-color: var(--pfm-line-strong);
+}
+
+.vdp-root.pfm-dash .vdp-table td {
+  color: #e2e8f0;
+  border-bottom-color: var(--pfm-line);
+}
+
+.vdp-root.pfm-dash .vdp-table tr:hover td {
+  background: rgba(59, 130, 246, 0.08);
+}
+
+.vdp-root.pfm-dash .vdp-top-vehicles-scroll .vdp-table thead th,
+.vdp-root.pfm-dash .vdp-table-scroll thead th {
+  background: var(--pfm-panel);
+}
+
+.vdp-root.pfm-dash .vdp-product-url {
+  color: var(--pfm-accent-hot);
+}
+
+.vdp-root.pfm-dash .vdp-product-url:hover {
+  color: #93c5fd;
+}
+
+.vdp-root.pfm-dash .vdp-newused-legend-label,
+.vdp-root.pfm-dash .vdp-newused-legend-val {
+  color: #cbd5e1;
+}
+
+/* Comparison panel */
+.vdp-root.pfm-dash .vdp-cmp-badge {
+  color: #86efac;
+  background: rgba(22, 163, 74, 0.18);
+  border-color: rgba(74, 222, 128, 0.35);
+}
+
+.vdp-root.pfm-dash .vdp-cmp-copy {
+  background: var(--pfm-panel-2);
+  border-color: var(--pfm-line-strong);
+  color: #e2e8f0;
+}
+
+.vdp-root.pfm-dash .vdp-cmp-copy:hover,
+.vdp-root.pfm-dash .vdp-cmp-copy.copied {
+  background: rgba(59, 130, 246, 0.18);
+  border-color: rgba(96, 165, 250, 0.45);
+  color: var(--pfm-accent-hot);
+}
+
+.vdp-root.pfm-dash .vdp-cmp-foot {
+  border-top-color: var(--pfm-line);
+}
+
+.vdp-root.pfm-dash .cmp-tbl thead tr:first-child th,
+.vdp-root.pfm-dash .cmp-tbl thead th {
+  background: var(--pfm-panel) !important;
+  color: #94a3b8 !important;
+  border-bottom-color: var(--pfm-line-strong);
+}
+
+.vdp-root.pfm-dash .cmp-tbl thead .col-cur {
+  background: rgba(59, 130, 246, 0.18) !important;
+}
+
+.vdp-root.pfm-dash .cmp-tbl thead .col-prev {
+  background: rgba(148, 163, 184, 0.12) !important;
+}
+
+.vdp-root.pfm-dash .cmp-tbl td {
+  background: transparent !important;
+  color: #e2e8f0 !important;
+  border-bottom-color: var(--pfm-line);
+}
+
+.vdp-root.pfm-dash .cmp-tbl td.col-cur {
+  background: rgba(59, 130, 246, 0.12) !important;
+}
+
+.vdp-root.pfm-dash .cmp-tbl td.col-prev {
+  background: rgba(148, 163, 184, 0.08) !important;
+}
+
+.vdp-root.pfm-dash .cmp-tbl-total-row td {
+  background: rgba(255, 255, 255, 0.04) !important;
+  color: #fff !important;
+  font-weight: 700;
+}
+
+.vdp-root.pfm-dash .cmp-table-loading {
+  color: var(--pfm-muted) !important;
+}
+
+.vdp-root.pfm-dash .cmp-channel-cell span {
+  color: #e2e8f0;
+}
+
+/* Error / soft surfaces inside panels */
+.vdp-root.pfm-dash .vdp-card[style*='fef2f2'],
+.vdp-root.pfm-dash .vdp-cmp-error {
+  background: rgba(127, 29, 29, 0.35) !important;
+  border-color: rgba(248, 113, 113, 0.4) !important;
+  color: #fecaca !important;
+}
+
+/* Loading overlay */
+.vdp-root.pfm-dash .vdp-view--card-loading::after {
+  background: rgba(10, 11, 13, 0.35);
+}
+
+/* Source Mapping — remap tokens inside PFM dash */
+.vdp-root.pfm-dash .src-map-page {
+  --sm-bg: rgba(22, 24, 29, 0.92);
+  --sm-bg-soft: rgba(28, 31, 38, 0.95);
+  --sm-bg-muted: rgba(10, 11, 13, 0.55);
+  --sm-border: rgba(241, 245, 249, 0.14);
+  --sm-ink: #f1f5f9;
+  --sm-muted: #94a3b8;
+  --sm-font: var(--font-pfm-ui), 'DM Sans', system-ui, sans-serif;
+}
+
+.vdp-root.pfm-dash .src-map-card {
+  box-shadow: 0 16px 40px rgba(0, 0, 0, 0.28);
+}
+
+.vdp-root.pfm-dash .src-map-mode-btn.is-active,
+.vdp-root.pfm-dash .src-map-btn--primary {
+  background: linear-gradient(180deg, #3b82f6 0%, #2563eb 100%);
+  border-color: transparent;
+  color: #fff;
+}
+
+.vdp-root.pfm-dash .src-map-select,
+.vdp-root.pfm-dash .src-map-search,
+.vdp-root.pfm-dash .src-map-rename,
+.vdp-root.pfm-dash .src-map-btn,
+.vdp-root.pfm-dash .src-map-multi-trigger {
+  background: var(--sm-bg-muted);
+  color: var(--sm-ink);
+  border-color: var(--sm-border);
+}
+
+.vdp-root.pfm-dash .src-map-table th {
+  background: var(--sm-bg-soft);
+  color: var(--sm-muted);
+}
+
+.vdp-root.pfm-dash .src-map-table td {
+  color: var(--sm-ink);
+  border-bottom-color: var(--sm-border);
+}
+
+.vdp-root.pfm-dash .src-map-table tr:hover td {
+  background: rgba(59, 130, 246, 0.1);
+}
+
+.vdp-root.pfm-dash .vdp-load-card-overlay {
+  background: rgba(10, 11, 13, 0.55);
+}
+
+.vdp-root.pfm-dash .vdp-load-card-overlay--freeze {
+  background: rgba(10, 11, 13, 0.72);
+}
+
+.vdp-root.pfm-dash .vdp-load-card {
+  background: rgba(22, 24, 29, 0.96);
+  border: 1px solid rgba(241, 245, 249, 0.14);
+  color: #f1f5f9;
+  box-shadow: 0 20px 50px rgba(0, 0, 0, 0.45);
+}
+
+.vdp-root.pfm-dash .vdp-load-banner {
+  background: rgba(22, 24, 29, 0.95);
+  border-color: rgba(241, 245, 249, 0.14);
+  color: #e2e8f0;
+}
+
+.vdp-root.pfm-dash .vdp-alert-error {
+  border-color: rgba(248, 113, 113, 0.4) !important;
+  background: rgba(127, 29, 29, 0.35) !important;
+  color: #fecaca !important;
+}
+
+@media (max-width: 720px) {
+  .vdp-root.pfm-dash .vdp-app-header h1 {
+    font-size: 18px;
+  }
+}

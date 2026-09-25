@@ -1,0 +1,751 @@
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
+import { JWT } from "https://esm.sh/google-auth-library@9.0.0";
+
+const corsHeaders = {
+  "Access-Control-Allow-Origin": "*",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+};
+
+const PAGE_TABLE = "smart_ga4_page_data";
+const CONFIG_TABLE = "smart_ga4_config";
+const CHUNK_SIZE = 500;
+const GLOBAL_BUDGET_MS = 130000;
+
+// 👇 HARDCODED BACKFILL WINDOW for Sky River RV
+const CLIENT_ID = "9842851162";
+const BACKFILL_FROM = "2026-05-01";
+const BACKFILL_TO   = "2026-05-19";
+
+const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
+serve(async (req) => {
+  const startTime = Date.now();
+  if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
+
+  const L: string[] = [];
+  const log = (m: string) => { L.push(m); console.log(m); };
+
+  function jsonRes(body: any, status = 200) {
+    return new Response(JSON.stringify(body), {
+      status,
+      headers: { ...corsHeaders, "Content-Type": "application/json" },
+    });
+  }
+
+  try {
+    const SB_URL = Deno.env.get("SUPABASE_URL") || "";
+    const SB_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
+    if (!SB_URL || !SB_KEY) throw new Error("Missing SUPABASE_URL or SUPABASE_SERVICE_ROLE_KEY");
+    const supabase = createClient(SB_URL, SB_KEY, {
+      auth: { persistSession: false, autoRefreshToken: false },
+    });
+
+    log("=== GA4 VDP RAW SYNC V26 (Cron Resumable Backfill) ===");
+    log(`Backfill window: ${BACKFILL_FROM} to ${BACKFILL_TO} | client_id=${CLIENT_ID}`);
+
+    // -----------------------------------------------------------------
+    // Build full backfill date list
+    // -----------------------------------------------------------------
+    const allDates: string[] = [];
+    {
+      const d = new Date(BACKFILL_FROM + "T00:00:00Z");
+      const end = new Date(BACKFILL_TO + "T00:00:00Z");
+      while (d <= end) {
+        allDates.push(d.toISOString().split("T")[0]);
+        d.setUTCDate(d.getUTCDate() + 1);
+      }
+    }
+    log(`Total days in window: ${allDates.length}`);
+
+    // -----------------------------------------------------------------
+    // Find which days are already filled — skip those (resumable)
+    // A day is considered "done" if it has ANY rows for this client.
+    // -----------------------------------------------------------------
+    const { data: existing, error: exErr } = await supabase
+      .from(PAGE_TABLE)
+      .select("report_date")
+      .eq("client_id", CLIENT_ID)
+      .gte("report_date", BACKFILL_FROM)
+      .lte("report_date", BACKFILL_TO);
+
+    if (exErr) log(`  ⚠️ Could not query existing rows: ${exErr.message} (will process all days)`);
+
+    const doneDays = new Set<string>();
+    if (existing) {
+      for (const r of existing) {
+        // report_date may come back as 'YYYY-MM-DD' or full ISO
+        const v = String(r.report_date).split("T")[0];
+        doneDays.add(v);
+      }
+    }
+    log(`Days already filled: ${doneDays.size} -> ${[...doneDays].sort().join(", ") || "(none)"}`);
+
+    const pendingDays = allDates.filter((d) => !doneDays.has(d));
+    log(`Days pending this run: ${pendingDays.length} -> ${pendingDays.join(", ") || "(none)"}`);
+
+    if (pendingDays.length === 0) {
+      log("✅ Backfill complete — nothing to do.");
+      return jsonRes({
+        success: true,
+        complete: true,
+        message: "Backfill complete for window " + BACKFILL_FROM + " to " + BACKFILL_TO,
+        log: L,
+      });
+    }
+
+    // -----------------------------------------------------------------
+    // Resilient config fetch
+    // -----------------------------------------------------------------
+    async function fetchConfigResilient(): Promise<Record<string, any> | null> {
+      const desired = ["ga4_property_id", "account_name", "vdp_url_pattern"];
+      let cols = [...desired];
+
+      while (cols.length > 0) {
+        const { data, error } = await supabase
+          .from(CONFIG_TABLE)
+          .select(cols.join(", "))
+          .eq("client_id", CLIENT_ID)
+          .limit(1);
+
+        if (!error) {
+          if (!data || data.length === 0) return null;
+          const row: Record<string, any> = { ...data[0] };
+          for (const c of desired) if (!(c in row)) row[c] = null;
+          return row;
+        }
+
+        const msg = error.message || "";
+        const m = msg.match(/column\s+\S*?\.?"?([a-zA-Z0-9_]+)"?\s+does not exist/i);
+        if (m && m[1]) {
+          const missing = m[1];
+          if (cols.includes(missing)) {
+            log(`  ⚠️ Config column "${missing}" does not exist — falling back to null`);
+            cols = cols.filter((c) => c !== missing);
+            continue;
+          }
+        }
+        throw new Error("Config query failed: " + msg);
+      }
+      return {};
+    }
+
+    const cfg = await fetchConfigResilient();
+    if (!cfg) return jsonRes({ error: "No GA4 configuration found for client_id: " + CLIENT_ID, log: L }, 400);
+
+    const propertyIdRaw = cfg.ga4_property_id;
+    if (!propertyIdRaw) return jsonRes({ error: "ga4_property_id missing for client_id: " + CLIENT_ID, log: L }, 400);
+    const propertyId = String(propertyIdRaw).replace("properties/", "").trim();
+    const accountName = cfg.account_name || CLIENT_ID;
+    const vdpPatternRaw: string | null = cfg.vdp_url_pattern ?? null;
+
+    log(`Config found: ${accountName} (Prop: ${propertyId})`);
+    log(`VDP pattern: ${vdpPatternRaw ? "[present]" : "[null — fallback]"}`);
+
+    // -----------------------------------------------------------------
+    // Google auth
+    // -----------------------------------------------------------------
+    const saEnv = Deno.env.get("GCP_SERVICE_ACCOUNT_JSON");
+    if (!saEnv) throw new Error("Missing GCP_SERVICE_ACCOUNT_JSON");
+    const credentials = JSON.parse(saEnv);
+
+    const authClient = new JWT({
+      email: credentials.client_email,
+      key: credentials.private_key,
+      scopes: ["https://www.googleapis.com/auth/analytics.readonly"],
+    });
+    const { token: TOKEN } = await authClient.getAccessToken();
+    if (!TOKEN) throw new Error("Failed to obtain GA4 access token");
+    log("Service Account Token OK");
+
+    // -----------------------------------------------------------------
+    // VDP matchers + classifier
+    // -----------------------------------------------------------------
+    interface VdpMatcher { regex: RegExp; raw: string; hasNewIndicator: boolean; hasUsedIndicator: boolean; }
+    function buildVdpMatchers(patternStr: string | null): VdpMatcher[] {
+      if (!patternStr) return [];
+      const parts = patternStr.split(/\s+OR\s+/i).map((p) => p.trim()).filter(Boolean);
+      const matchers: VdpMatcher[] = [];
+      for (const raw of parts) {
+        try {
+          const regex = new RegExp(raw, "i");
+          const rawLower = raw.toLowerCase();
+          matchers.push({
+            regex, raw,
+            hasNewIndicator: rawLower.includes("/new-") || rawLower.includes("/new/") || rawLower.includes("/new-inventory") || rawLower.includes("/new+") || rawLower.includes("-new-") || rawLower === "/product/new-" || rawLower.includes("/inventory/new"),
+            hasUsedIndicator: rawLower.includes("/used-") || rawLower.includes("/used/") || rawLower.includes("/used-inventory") || rawLower.includes("/used+") || rawLower.includes("-used-") || rawLower === "/product/used-" || rawLower.includes("/inventory/used") || rawLower.includes("pre-owned"),
+          });
+        } catch { log("  WARN: Could not compile VDP regex: " + raw); }
+      }
+      return matchers;
+    }
+    const vdpMatchers = buildVdpMatchers(vdpPatternRaw);
+    log(`VDP matchers built: ${vdpMatchers.length} patterns`);
+
+    function classifyPage(pageLocation: string, pagePath: string): string {
+      const pathLower = (pagePath || "").toLowerCase();
+      const locLower = (pageLocation || "").toLowerCase();
+      if (vdpMatchers.length > 0) {
+        for (const matcher of vdpMatchers) {
+          if (matcher.regex.test(pagePath) || matcher.regex.test(pageLocation)) {
+            if (matcher.hasNewIndicator && !matcher.hasUsedIndicator) return "VDP_New";
+            if (matcher.hasUsedIndicator && !matcher.hasNewIndicator) return "VDP_Used";
+            if (pathLower.includes("/new-") || pathLower.includes("/new/") || pathLower.includes("/new+") || pathLower.includes("-new-") || pathLower.includes("/product/new-") || pathLower.includes("/inventory/new") || pathLower.includes("/new-inventory") || locLower.includes("/new-") || locLower.includes("/new/") || locLower.includes("/inventory/new")) return "VDP_New";
+            if (pathLower.includes("/used-") || pathLower.includes("/used/") || pathLower.includes("/used+") || pathLower.includes("-used-") || pathLower.includes("/product/used-") || pathLower.includes("/inventory/used") || pathLower.includes("/used-inventory") || pathLower.includes("pre-owned") || locLower.includes("/used-") || locLower.includes("/used/") || locLower.includes("/inventory/used")) return "VDP_Used";
+            return "VDP";
+          }
+        }
+      }
+      return "Non-VDP";
+    }
+
+    async function runReport(reportBody: any) {
+      const url = `https://analyticsdata.googleapis.com/v1beta/properties/${propertyId}:runReport`;
+      const res = await fetch(url, {
+        method: "POST",
+        headers: { Authorization: "Bearer " + TOKEN, "Content-Type": "application/json" },
+        body: JSON.stringify(reportBody),
+      });
+      if (!res.ok) { const txt = await res.text(); throw new Error(`GA4 API ${res.status}: ${txt}`); }
+      return await res.json();
+    }
+
+    const normChannel = (v: string) => String(v || "").toLowerCase().replace(/ /g, "_").replace(/\//g, "_");
+    function intVal(mv: any[], idx: number): number { return parseInt(mv?.[idx]?.value || "0", 10) || 0; }
+
+    // -----------------------------------------------------------------
+    // Resilient insert (auto-strip missing columns)
+    // -----------------------------------------------------------------
+    const droppedInsertCols = new Set<string>();
+    async function insertResilient(rows: any[]): Promise<{ inserted: number; error?: any }> {
+      let working = rows;
+      if (droppedInsertCols.size > 0) {
+        working = working.map((r) => { const c = { ...r }; for (const k of droppedInsertCols) delete c[k]; return c; });
+      }
+      for (let attempt = 0; attempt < 10; attempt++) {
+        const { error } = await supabase.from(PAGE_TABLE).insert(working);
+        if (!error) return { inserted: working.length };
+        const msg = error.message || "";
+        const m = msg.match(/column\s+\S*?\.?"?([a-zA-Z0-9_]+)"?\s+of relation\s+"?[a-zA-Z0-9_]+"?\s+does not exist/i)
+              || msg.match(/column\s+"?([a-zA-Z0-9_]+)"?\s+does not exist/i);
+        if (m && m[1]) {
+          const missing = m[1];
+          if (!droppedInsertCols.has(missing)) {
+            droppedInsertCols.add(missing);
+            log(`  ⚠️ Insert column "${missing}" does not exist — stripping and retrying`);
+            working = working.map((r) => { const c = { ...r }; delete c[missing]; return c; });
+            continue;
+          }
+        }
+        return { inserted: 0, error };
+      }
+      return { inserted: 0, error: new Error("Too many missing columns; gave up retrying") };
+    }
+
+    // -----------------------------------------------------------------
+    // Main loop — process pending days within time budget
+    // -----------------------------------------------------------------
+    let totalPageRows = 0;
+    let totalFailedRows = 0;
+    let cutoffReached = false;
+    const processedDays: string[] = [];
+    const errorSamples: any[] = [];
+
+    for (const dateStr of pendingDays) {
+      if (Date.now() - startTime > GLOBAL_BUDGET_MS) {
+        log(`⏱️ TIME LIMIT REACHED: Stopping before ${dateStr} — cron will resume next run`);
+        cutoffReached = true; break;
+      }
+
+      log(`\n--- Fetching Page Data for ${dateStr} ---`);
+
+      try {
+        let offset = 0;
+        let hasMore = true;
+        const PAGE_SIZE = 1500;
+
+        const { error: delErr } = await supabase
+          .from(PAGE_TABLE)
+          .delete()
+          .eq("client_id", CLIENT_ID)
+          .eq("report_date", dateStr);
+        if (delErr) log(`  ⚠️ Delete warning for ${dateStr}: ${delErr.message}`);
+        else log(`  Cleaned existing rows for ${dateStr}`);
+
+        let dayRowsInserted = 0;
+
+        while (hasMore) {
+          const r2 = await runReport({
+            dateRanges: [{ startDate: dateStr, endDate: dateStr }],
+            dimensions: [
+              { name: "pageLocation" }, { name: "pageTitle" },
+              { name: "sessionDefaultChannelGroup" }, { name: "sessionSource" },
+              { name: "sessionMedium" }, { name: "sessionCampaignName" },
+            ],
+            metrics: [
+              { name: "screenPageViews" }, { name: "totalUsers" },
+              { name: "newUsers" }, { name: "sessions" },
+            ],
+            limit: PAGE_SIZE,
+            offset: offset,
+          });
+
+          const pageRows = r2.rows || [];
+          log(`  GA4 returned ${pageRows.length} rows (offset ${offset})`);
+          if (pageRows.length === 0) { hasMore = false; break; }
+
+          const pageData: any[] = [];
+          for (const row of pageRows) {
+            const dv = row.dimensionValues;
+            const mv = row.metricValues;
+            const pageLocation = dv?.[0]?.value || "";
+            const pagePath = (() => { try { return new URL(pageLocation).pathname; } catch { return pageLocation; } })();
+            const channel = normChannel(dv?.[2]?.value);
+            const source = dv?.[3]?.value || "(direct)";
+            const medium = dv?.[4]?.value || "(none)";
+            const pageType = classifyPage(pageLocation, pagePath);
+
+            pageData.push({
+              client_id: CLIENT_ID,
+              ga4_property_id: propertyId,
+              account_name: accountName,
+              report_date: dateStr,
+              page_location: pageLocation,
+              page_path: pagePath,
+              page_title: dv?.[1]?.value || "",
+              channel: channel,
+              source: source,
+              medium: medium,
+              source_medium: source + " / " + medium,
+              session_campaign: dv?.[5]?.value || "(not set)",
+              views: intVal(mv, 0),
+              total_users: intVal(mv, 1),
+              new_users: intVal(mv, 2),
+              sessions: intVal(mv, 3),
+              ga4_page_type: pageType,
+              vdp_conditions: pageType.startsWith("VDP"),
+            });
+          }
+
+          for (let j = 0; j < pageData.length; j += CHUNK_SIZE) {
+            const chunk = pageData.slice(j, j + CHUNK_SIZE);
+            const { inserted, error: insErr } = await insertResilient(chunk);
+            if (insErr) {
+              totalFailedRows += chunk.length;
+              log(`  ❌ INSERT ERROR (chunk ${j}): ${insErr.message} | code=${insErr.code} | details=${insErr.details}`);
+              if (errorSamples.length < 3) {
+                errorSamples.push({ error: insErr.message, code: insErr.code, details: insErr.details, hint: insErr.hint, sample_row: chunk[0] });
+              }
+            } else {
+              totalPageRows += inserted;
+              dayRowsInserted += inserted;
+            }
+            await delay(10);
+          }
+
+          log(`  Processed ${pageData.length} rows (offset ${offset}) | day total: ${dayRowsInserted}`);
+
+          if (pageRows.length < PAGE_SIZE) hasMore = false;
+          else { offset += PAGE_SIZE; await delay(200); }
+        }
+
+        processedDays.push(dateStr);
+        log(`  ✅ ${dateStr} done — ${dayRowsInserted} rows`);
+      } catch (e: any) {
+        log(`ERR on ${dateStr}: ` + e.message);
+      }
+    }
+
+    const remainingDays = pendingDays.filter((d) => !processedDays.includes(d));
+    const isComplete = !cutoffReached && remainingDays.length === 0;
+
+    log(`\n=== RUN DONE === Inserted: ${totalPageRows} | Failed: ${totalFailedRows} | Processed days: ${processedDays.length} | Remaining: ${remainingDays.length}`);
+    if (droppedInsertCols.size > 0) log(`Auto-dropped columns: ${[...droppedInsertCols].join(", ")}`);
+    if (isComplete) log("🎉 Full backfill window complete.");
+    else log(`⏭️  Cron will resume on next invocation. Remaining: ${remainingDays.join(", ")}`);
+
+    return jsonRes({
+      success: totalFailedRows === 0,
+      complete: isComplete,
+      cutoff_reached: cutoffReached,
+      processed_days: processedDays,
+      remaining_days: remainingDays,
+      page_rows: totalPageRows,
+      failed_rows: totalFailedRows,
+      dropped_insert_columns: [...droppedInsertCols],
+      error_samples: errorSamples,
+      log: L,
+    });
+  } catch (err: any) {
+    return jsonRes({ error: err.message, log: L }, 500);
+  }
+});
+
+
+
+
+
+import { serve } from "https://deno.land/std@0.168.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.39.3";
+import { JWT } from "https://esm.sh/google-auth-library@9.0.0";
+
+const DATA_TABLE   = "smart_ga4_data";
+const CONFIG_TABLE = "smart_ga4_config";
+const PAGE_SIZE    = 10000;
+const CHUNK_SIZE   = 500;
+const PER_DEALER_BUDGET_MS = 110000;
+const GLOBAL_BUDGET_MS     = 135000;
+
+const delay = (ms: number) => new Promise(r => setTimeout(r, ms));
+const fmtDate = (raw: string) => `${raw.slice(0,4)}-${raw.slice(4,6)}-${raw.slice(6)}`;
+const normChannel = (v: string) =>
+  String(v || "").toLowerCase().replace(/ /g, "_").replace(/\//g, "_");
+
+async function runReport(url: string, token: string, body: any) {
+  const res = await fetch(url, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  if (!res.ok) {
+    const txt = await res.text();
+    throw new Error(`GA4 API ${res.status}: ${txt}`);
+  }
+  return await res.json();
+}
+
+async function flushUpsert(supabase: any, rows: any[]) {
+  for (let j = 0; j < rows.length; j += CHUNK_SIZE) {
+    const chunk = rows.slice(j, j + CHUNK_SIZE);
+    const { error } = await supabase
+      .from(DATA_TABLE)
+      .upsert(chunk, {
+        onConflict: "client_id,ga4_property_id,report_date,channel,source,medium,session_campaign"
+      });
+    if (error) console.error("upsert error", error);
+    await delay(5);
+  }
+}
+
+async function getProgress(supabase: any) {
+  const { data: stats } = await supabase
+    .from(CONFIG_TABLE)
+    .select("master_sync_status")
+    .eq("is_active", true);
+  const total   = stats?.length || 0;
+  const done    = stats?.filter((r: any) => r.master_sync_status === "ok").length || 0;
+  const skipped = stats?.filter((r: any) => r.master_sync_status === "skipped_no_access").length || 0;
+  const errored = stats?.filter((r: any) => (r.master_sync_status || "").startsWith("error:")).length || 0;
+  const pending = total - done - skipped - errored;
+  return { total, done, pending, skipped, errored };
+}
+
+async function syncOneDealer(
+  supabase: any,
+  accessToken: string,
+  config: any,
+  startDate: string,
+  dealerStart: number,
+) {
+  const clientId    = config.client_id;
+  const propertyId  = String(config.ga4_property_id || "").replace("properties/", "").trim();
+  const accountName = config.account_name || clientId;
+  if (!clientId || !propertyId) return { skipped: true, rows: 0 };
+
+  const url = `https://analyticsdata.googleapis.com/v1beta/properties/${propertyId}:runReport`;
+  console.log(`\n🚀 ${accountName} (client_id=${clientId})`);
+
+  let rowsSynced = 0;
+  const mainKeys = new Set<string>();
+
+  // Pass 1: main metrics (no page dims) — accurate sessions/users/bounce/duration
+  let offset = 0;
+  while (true) {
+    if (Date.now() - dealerStart > PER_DEALER_BUDGET_MS - 30000) {
+      console.log("  ⏱ pass1 budget reached");
+      break;
+    }
+    const data = await runReport(url, accessToken, {
+      dimensions: [
+        { name: "date" },
+        { name: "sessionDefaultChannelGroup" },
+        { name: "sessionSource" },
+        { name: "sessionMedium" },
+        { name: "sessionSourceMedium" },
+        { name: "sessionCampaignName" },
+      ],
+      metrics: [
+        { name: "screenPageViews" },
+        { name: "totalUsers" },
+        { name: "newUsers" },
+        { name: "sessions" },
+        { name: "bounceRate" },
+        { name: "averageSessionDuration" },
+      ],
+      dateRanges: [{ startDate, endDate: "today" }],
+      limit: PAGE_SIZE, offset,
+    });
+    const rows = data.rows || [];
+    if (rows.length === 0) break;
+
+    const batch: any[] = [];
+    for (const row of rows) {
+      const dv = row.dimensionValues, mv = row.metricValues;
+      const date     = fmtDate(dv[0].value);
+      const channel  = normChannel(dv[1].value);
+      const source   = dv[2].value || "(not set)";
+      const medium   = dv[3].value || "(not set)";
+      const sm       = dv[4].value || "(not set)";
+      const campaign = dv[5].value || "(not set)";
+      mainKeys.add(`${date}|${channel}|${source}|${medium}|${campaign}`);
+
+      batch.push({
+        client_id: clientId,
+        ga4_property_id: propertyId,
+        account_name: accountName,
+        report_date: date,
+        channel, source, medium,
+        source_medium: sm,
+        session_campaign: campaign,
+        views:                parseInt(mv[0].value || "0"),
+        total_users:          parseInt(mv[1].value || "0"),
+        new_users:            parseInt(mv[2].value || "0"),
+        sessions:             parseInt(mv[3].value || "0"),
+        bounce_rate:          parseFloat(mv[4].value || "0"),
+        avg_session_duration: parseFloat(mv[5].value || "0"),
+      });
+    }
+    await flushUpsert(supabase, batch);
+    rowsSynced += batch.length;
+    console.log(`  pass1 +${batch.length} (offset ${offset})`);
+    if (rows.length < PAGE_SIZE) break;
+    offset += PAGE_SIZE;
+    await delay(150);
+  }
+
+  // Pass 2: top page per (date, channel, source, medium, campaign) — views only
+  const topPageMap = new Map<string, { page_path: string; page_title: string; page_location: string; views: number }>();
+  offset = 0;
+  while (true) {
+    if (Date.now() - dealerStart > PER_DEALER_BUDGET_MS - 15000) {
+      console.log("  ⏱ pass2 budget reached");
+      break;
+    }
+    const data = await runReport(url, accessToken, {
+      dimensions: [
+        { name: "date" },
+        { name: "sessionDefaultChannelGroup" },
+        { name: "sessionSource" },
+        { name: "sessionMedium" },
+        { name: "sessionCampaignName" },
+        { name: "pagePath" },
+        { name: "pageTitle" },
+        { name: "pageLocation" },
+      ],
+      metrics: [{ name: "screenPageViews" }],
+      dateRanges: [{ startDate, endDate: "today" }],
+      limit: PAGE_SIZE, offset,
+    });
+    const rows = data.rows || [];
+    if (rows.length === 0) break;
+
+    for (const row of rows) {
+      const dv = row.dimensionValues;
+      const date     = fmtDate(dv[0].value);
+      const channel  = normChannel(dv[1].value);
+      const source   = dv[2].value || "(not set)";
+      const medium   = dv[3].value || "(not set)";
+      const campaign = dv[4].value || "(not set)";
+      const key = `${date}|${channel}|${source}|${medium}|${campaign}`;
+      if (!mainKeys.has(key)) continue;
+
+      const views = parseInt(row.metricValues[0].value || "0");
+      const cur = topPageMap.get(key);
+      if (!cur || views > cur.views) {
+        topPageMap.set(key, {
+          page_path: dv[5].value || "",
+          page_title: dv[6].value || "",
+          page_location: dv[7].value || "",
+          views,
+        });
+      }
+    }
+    console.log(`  pass2 scanned ${rows.length} (top-pages ${topPageMap.size})`);
+    if (rows.length < PAGE_SIZE) break;
+    offset += PAGE_SIZE;
+    await delay(150);
+  }
+
+  // Pass 3: bulk RPC update of page columns
+  if (topPageMap.size > 0) {
+    const updates: any[] = [];
+    for (const [key, p] of topPageMap) {
+      const [date, channel, source, medium, campaign] = key.split("|");
+      updates.push({
+        client_id: clientId,
+        ga4_property_id: propertyId,
+        report_date: date,
+        channel, source, medium, session_campaign: campaign,
+        page_path: p.page_path,
+        page_title: p.page_title,
+        page_location: p.page_location,
+      });
+    }
+    for (let j = 0; j < updates.length; j += 500) {
+      const chunk = updates.slice(j, j + 500);
+      const { error } = await supabase.rpc("apply_top_pages", { updates: chunk });
+      if (error) console.error("rpc error", error);
+    }
+    console.log(`  pass3 applied ${updates.length} page updates`);
+  }
+
+  // Mark dealer as successfully synced
+  await supabase
+    .from(CONFIG_TABLE)
+    .update({
+      last_fetched_at: new Date().toISOString(),
+      master_last_synced: new Date().toISOString(),
+      master_sync_status: "ok",
+    })
+    .eq("client_id", clientId)
+    .eq("ga4_property_id", propertyId);
+
+  console.log(`✅ ${accountName}: ${rowsSynced} main rows`);
+  return { skipped: false, rows: rowsSynced };
+}
+
+serve(async (req) => {
+  const startTime = Date.now();
+  console.log("🏁 GA4 Sync — multi-dealer (cron mode)");
+
+  const supabase = createClient(
+    Deno.env.get("SUPABASE_URL")!,
+    Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+  );
+
+  const saEnv = Deno.env.get("GCP_SERVICE_ACCOUNT_JSON");
+  if (!saEnv) {
+    return new Response(JSON.stringify({ error: "Missing GCP_SERVICE_ACCOUNT_JSON" }), { status: 500 });
+  }
+  const credentials = JSON.parse(saEnv);
+  const authClient = new JWT({
+    email: credentials.client_email,
+    key: credentials.private_key,
+    scopes: ["https://www.googleapis.com/auth/analytics.readonly"],
+  });
+  const { token: accessToken } = await authClient.getAccessToken();
+
+  // Optional body: { "client_id": "...", "start_date": "2026-05-17", "mode": "all" | "next" }
+  let body: any = {};
+  try { body = await req.json(); } catch { /* no body */ }
+  const onlyClientId = body?.client_id ? String(body.client_id) : null;
+  const startDate    = body?.start_date || "2026-05-17";
+  const mode         = body?.mode || "next";
+
+  try {
+    let configs: any[] = [];
+
+    if (onlyClientId) {
+      const { data, error } = await supabase
+        .from(CONFIG_TABLE)
+        .select("client_id,ga4_property_id,account_name,is_active")
+        .eq("is_active", true)
+        .eq("client_id", onlyClientId);
+      if (error) throw error;
+      configs = data || [];
+    } else if (mode === "all") {
+      const { data, error } = await supabase
+        .from(CONFIG_TABLE)
+        .select("client_id,ga4_property_id,account_name,is_active")
+        .eq("is_active", true);
+      if (error) throw error;
+      configs = data || [];
+    } else {
+      // Default cron mode: pick most-stale dealer(s), skipping no-access ones
+      const { data, error } = await supabase.rpc("next_dealer_to_sync");
+      if (error) throw error;
+      configs = data || [];
+    }
+
+    // Show progress BEFORE this tick
+    const before = await getProgress(supabase);
+    console.log(`📊 BEFORE: ${before.done}/${before.total} done | ${before.pending} pending | ${before.skipped} no_access | ${before.errored} errored`);
+
+    if (!configs?.length) {
+      console.log("✨ Nothing to sync — all dealers are fresh.");
+      return new Response(JSON.stringify({
+        message: "No dealers to sync",
+        progress: before,
+      }), { status: 200 });
+    }
+    console.log(`Found ${configs.length} dealer(s) to sync this tick`);
+
+    const results: any[] = [];
+    let totalRows = 0;
+
+    for (const cfg of configs) {
+      if (Date.now() - startTime > GLOBAL_BUDGET_MS) {
+        console.log(`⏱ Global timeout reached. Remaining dealers deferred.`);
+        results.push({ client_id: cfg.client_id, status: "deferred" });
+        continue;
+      }
+
+      const dealerStart = Date.now();
+      try {
+        const r = await syncOneDealer(supabase, accessToken!, cfg, startDate, dealerStart);
+        totalRows += r.rows;
+        results.push({ client_id: cfg.client_id, rows: r.rows, skipped: r.skipped });
+      } catch (e: any) {
+        const msg = e.message || String(e);
+        console.error(`❌ ${cfg.client_id}: ${msg}`);
+
+        // Detect permission/not-found errors → mark as permanently skipped
+        const isPermissionError =
+          msg.includes("403") ||
+          msg.includes("PERMISSION_DENIED") ||
+          msg.includes("does not have sufficient permissions") ||
+          msg.includes("404") ||
+          msg.includes("NOT_FOUND");
+
+        const status = isPermissionError
+          ? "skipped_no_access"
+          : `error: ${msg.slice(0, 200)}`;
+
+        // CRITICAL: bump last_fetched_at so rotation moves on to the next dealer
+        await supabase
+          .from(CONFIG_TABLE)
+          .update({
+            master_sync_status: status,
+            last_fetched_at: new Date().toISOString(),
+          })
+          .eq("client_id", cfg.client_id)
+          .eq("ga4_property_id", cfg.ga4_property_id);
+
+        results.push({
+          client_id: cfg.client_id,
+          error: msg,
+          skipped: isPermissionError,
+        });
+      }
+    }
+
+    // Show progress AFTER this tick
+    const after = await getProgress(supabase);
+    console.log(`📊 AFTER:  ${after.done}/${after.total} done | ${after.pending} pending | ${after.skipped} no_access | ${after.errored} errored`);
+    console.log(`⏱ Tick elapsed: ${Date.now() - startTime}ms`);
+
+    return new Response(JSON.stringify({
+      success: true,
+      total_rows_synced: totalRows,
+      dealers_processed: results.length,
+      results,
+      progress: after,
+      elapsed_ms: Date.now() - startTime,
+    }), { headers: { "Content-Type": "application/json" } });
+
+  } catch (e: any) {
+    console.error("Critical:", e.message);
+    return new Response(JSON.stringify({ error: e.message }), { status: 500 });
+  }
+});
