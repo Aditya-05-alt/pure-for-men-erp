@@ -53,7 +53,10 @@ RETURNS TABLE (
   page_title text,
   views bigint,
   sessions bigint,
-  total_users bigint
+  total_users bigint,
+  new_users bigint,
+  conversions numeric,
+  revenue numeric
 )
 LANGUAGE sql
 STABLE
@@ -65,7 +68,10 @@ AS $$
     MAX(NULLIF(TRIM(d.page_title), '')) AS page_title,
     COALESCE(SUM(d.views), 0)::bigint AS views,
     COALESCE(SUM(d.sessions), 0)::bigint AS sessions,
-    COALESCE(SUM(d.total_users), 0)::bigint AS total_users
+    COALESCE(SUM(d.total_users), 0)::bigint AS total_users,
+    COALESCE(SUM(d.new_users), 0)::bigint AS new_users,
+    COALESCE(SUM(d.conversions), 0)::numeric AS conversions,
+    COALESCE(SUM(d.revenue), 0)::numeric AS revenue
   FROM public.chipper_pfm_ga4_data d
   WHERE d.client_id = p_client_id
     AND d.report_date >= p_from

@@ -1,12 +1,11 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { fetchPfmProductOverview } from '@/lib/api/pfmProductOverview';
 import { enumerateDatesInclusive } from '@/lib/ga4/dateRange';
 import { colorForChannel } from '@/lib/ga4/channelDisplay';
 import {
   formatRangeLabel,
-  mergeChannelComparison,
   pctChange,
 } from '@/lib/overview/comparePeriod';
 import { fmt, safeDiv } from '@/lib/vdp/aggregates';
@@ -133,6 +132,16 @@ function productPageHref(pagePath) {
   return `${PFM_SITE_ORIGIN}${path.startsWith('/') ? path : `/${path}`}`;
 }
 
+function formatMoney(n) {
+  const v = Number(n) || 0;
+  return v.toLocaleString('en-US', {
+    style: 'currency',
+    currency: 'USD',
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
+  });
+}
+
 function TopProductsTable({ rows, scroll, labelMode = 'title' }) {
   if (!rows?.length) {
     return (
@@ -148,6 +157,10 @@ function TopProductsTable({ rows, scroll, labelMode = 'title' }) {
         <tr>
           <th>{showTitle ? 'Page title' : 'URL'}</th>
           <th className="right">Views</th>
+          <th className="right">Conversions</th>
+          <th className="right">Total Users</th>
+          <th className="right">New Users</th>
+          {/* <th className="right">Revenue</th> */}
         </tr>
       </thead>
       <tbody>
@@ -174,6 +187,10 @@ function TopProductsTable({ rows, scroll, labelMode = 'title' }) {
                 )}
               </td>
               <td className="right mono">{fmt(r.views)}</td>
+              <td className="right mono">{fmt(r.conversions)}</td>
+              <td className="right mono">{fmt(r.totalUsers)}</td>
+              <td className="right mono">{fmt(r.newUsers)}</td>
+              {/* <td className="right mono">{formatMoney(r.revenue)}</td> */}
             </tr>
           );
         })}
@@ -212,53 +229,214 @@ function TopProductsLabelSelect({ value, onChange }) {
   );
 }
 
-function ProductChannelCmpTable({
-  curRows,
+function emptyChannelMetrics() {
+  return {
+    views: 0,
+    conversions: 0,
+    totalUsers: 0,
+    newUsers: 0,
+  };
+}
+
+function metricsFromChannelRow(r) {
+  return {
+    views: Number(r?.views) || 0,
+    conversions: Number(r?.conversions) || 0,
+    totalUsers: Number(r?.totalUsers) || 0,
+    newUsers: Number(r?.newUsers) || 0,
+  };
+}
+
+function mergeChannelMetricComparison(curRows, priRows) {
+  const curMap = new Map();
+  const priMap = new Map();
+  for (const r of curRows || []) {
+    curMap.set(String(r.channel_bucket || '(not set)'), metricsFromChannelRow(r));
+  }
+  for (const r of priRows || []) {
+    priMap.set(String(r.channel_bucket || '(not set)'), metricsFromChannelRow(r));
+  }
+  const keys = new Set([...curMap.keys(), ...priMap.keys()]);
+  const rows = [...keys].map((ch) => {
+    const cur = curMap.get(ch) || emptyChannelMetrics();
+    const pri = priMap.get(ch) || emptyChannelMetrics();
+    return {
+      ch,
+      cur,
+      pri,
+      delta: {
+        views: pctChange(cur.views, pri.views),
+        conversions: pctChange(cur.conversions, pri.conversions),
+        totalUsers: pctChange(cur.totalUsers, pri.totalUsers),
+        newUsers: pctChange(cur.newUsers, pri.newUsers),
+      },
+    };
+  });
+  rows.sort(
+    (a, b) =>
+      b.cur.views - a.cur.views ||
+      b.pri.views - a.pri.views ||
+      a.ch.localeCompare(b.ch)
+  );
+
+  const totalsCur = emptyChannelMetrics();
+  const totalsPri = emptyChannelMetrics();
+  for (const r of rows) {
+    totalsCur.views += r.cur.views;
+    totalsCur.conversions += r.cur.conversions;
+    totalsCur.totalUsers += r.cur.totalUsers;
+    totalsCur.newUsers += r.cur.newUsers;
+    totalsPri.views += r.pri.views;
+    totalsPri.conversions += r.pri.conversions;
+    totalsPri.totalUsers += r.pri.totalUsers;
+    totalsPri.newUsers += r.pri.newUsers;
+  }
+
+  return {
+    rows,
+    totals: {
+      cur: totalsCur,
+      pri: totalsPri,
+      delta: {
+        views: pctChange(totalsCur.views, totalsPri.views),
+        conversions: pctChange(totalsCur.conversions, totalsPri.conversions),
+        totalUsers: pctChange(totalsCur.totalUsers, totalsPri.totalUsers),
+        newUsers: pctChange(totalsCur.newUsers, totalsPri.newUsers),
+      },
+    },
+  };
+}
+
+function MetricCompareCells({ cur, pri, delta }) {
+  return (
+    <>
+      <td className="col-cur mono">{fmt(cur)}</td>
+      <td className="col-prev mono">{fmt(pri)}</td>
+      <td className="col-mom">
+        <Delta value={delta} />
+      </td>
+    </>
+  );
+}
+
+function ProductChannelTable({
+  rows,
   priRows,
   curLabel,
   priLabel,
-  comparePctLabel,
+  compareActive,
+  comparePctLabel = 'MoM',
   loading,
 }) {
   const [copied, setCopied] = useState(false);
 
   const comparison = useMemo(
-    () => mergeChannelComparison(curRows, priRows, []),
-    [curRows, priRows]
+    () => mergeChannelMetricComparison(rows || [], priRows || []),
+    [rows, priRows]
   );
 
-  const rowsWithColors = useMemo(
-    () =>
-      (comparison.rows || []).map((r, i) => ({
+  const channelRows = useMemo(() => {
+    if (compareActive) {
+      return (comparison.rows || []).map((r, i) => ({
         ...r,
         color: colorForChannel(r.ch, i),
-      })),
-    [comparison.rows]
-  );
+      }));
+    }
+    return (rows || []).map((r, i) => ({
+      ch: r.channel_bucket || '(not set)',
+      cur: metricsFromChannelRow(r),
+      color: colorForChannel(r.channel_bucket || '(not set)', i),
+    }));
+  }, [compareActive, comparison.rows, rows]);
 
-  const totals = comparison.totals || {
-    cur: 0,
-    cmp: 0,
-    delta: 0,
+  const totals = useMemo(() => {
+    if (compareActive) return comparison.totals;
+    const cur = channelRows.reduce(
+      (acc, r) => {
+        acc.views += r.cur.views;
+        acc.conversions += r.cur.conversions;
+        acc.totalUsers += r.cur.totalUsers;
+        acc.newUsers += r.cur.newUsers;
+        return acc;
+      },
+      emptyChannelMetrics()
+    );
+    return { cur };
+  }, [compareActive, comparison.totals, channelRows]);
+
+  const colCount = compareActive ? 13 : 5;
+  const metricKeys = ['views', 'conversions', 'totalUsers', 'newUsers'];
+  const metricLabels = {
+    views: 'Views',
+    conversions: 'Conversions',
+    totalUsers: 'Total Users',
+    newUsers: 'New Users',
   };
 
+  const fmtDelta = (n) => `${n >= 0 ? '+' : ''}${n}%`;
+
   const onCopy = useCallback(() => {
-    const lines = [
-      ['Channel', curLabel, priLabel, comparePctLabel].join('\t'),
-    ];
-    rowsWithColors.forEach((r) => {
+    const lines = [];
+    if (compareActive) {
       lines.push(
-        [r.ch, r.cur, r.cmp, `${r.delta >= 0 ? '+' : ''}${r.delta}%`].join('\t')
+        [
+          'Channel',
+          ...metricKeys.flatMap((k) => [
+            `${metricLabels[k]} ${curLabel}`,
+            `${metricLabels[k]} ${priLabel}`,
+            `${metricLabels[k]} ${comparePctLabel}`,
+          ]),
+        ].join('\t')
       );
-    });
-    lines.push(
-      [
-        'Total Product Views',
-        totals.cur,
-        totals.cmp,
-        `${totals.delta >= 0 ? '+' : ''}${totals.delta}%`,
-      ].join('\t')
-    );
+      channelRows.forEach((r) => {
+        lines.push(
+          [
+            r.ch,
+            ...metricKeys.flatMap((k) => [
+              r.cur[k],
+              r.pri[k],
+              fmtDelta(r.delta[k]),
+            ]),
+          ].join('\t')
+        );
+      });
+      lines.push(
+        [
+          'Total',
+          ...metricKeys.flatMap((k) => [
+            totals.cur[k],
+            totals.pri[k],
+            fmtDelta(totals.delta[k]),
+          ]),
+        ].join('\t')
+      );
+    } else {
+      lines.push(
+        ['Channel', 'Views', 'Conversions', 'Total Users', 'New Users'].join(
+          '\t'
+        )
+      );
+      channelRows.forEach((r) => {
+        lines.push(
+          [
+            r.ch,
+            r.cur.views,
+            r.cur.conversions,
+            r.cur.totalUsers,
+            r.cur.newUsers,
+          ].join('\t')
+        );
+      });
+      lines.push(
+        [
+          'Total',
+          totals.cur.views,
+          totals.cur.conversions,
+          totals.cur.totalUsers,
+          totals.cur.newUsers,
+        ].join('\t')
+      );
+    }
     navigator.clipboard
       .writeText(lines.join('\n'))
       .then(() => {
@@ -266,19 +444,33 @@ function ProductChannelCmpTable({
         setTimeout(() => setCopied(false), 1800);
       })
       .catch(() => {});
-  }, [rowsWithColors, totals, curLabel, priLabel, comparePctLabel]);
+  }, [
+    channelRows,
+    totals,
+    compareActive,
+    curLabel,
+    priLabel,
+    comparePctLabel,
+  ]);
 
   return (
     <div className="vdp-card vdp-cmp-panel" style={{ marginTop: 16 }}>
       <div className="vdp-cmp-head">
         <div>
-          <h3>Product Views by Channel — Period Comparison</h3>
+          <h3>
+            Product Views by Channel
+            {compareActive ? ' — Period Comparison' : ''}
+          </h3>
           <div className="vdp-cardsub" style={{ marginBottom: 0 }}>
-            {curLabel} · {priLabel} · {comparePctLabel}
+            {compareActive
+              ? `${curLabel} vs ${priLabel} · ${comparePctLabel} · all metrics`
+              : `${curLabel} · GA4 session channels · Conversions (key events)`}
           </div>
         </div>
         <div className="vdp-cmp-head-actions">
-          <span className="vdp-cmp-badge">Copy-ready</span>
+          {compareActive ? (
+            <span className="vdp-cmp-badge">Copy-ready</span>
+          ) : null}
           <button
             type="button"
             className={`vdp-cmp-copy ${copied ? 'copied' : ''}`}
@@ -291,30 +483,57 @@ function ProductChannelCmpTable({
       </div>
 
       <div className="cmp-table-wrap">
-        <table className="cmp-tbl cmp-tbl--period-compare">
+        <table
+          className={`cmp-tbl cmp-tbl--channels${
+            compareActive ? ' cmp-tbl--period-compare cmp-tbl--multi-metric' : ''
+          }`}
+        >
           <thead>
-            <tr>
-              <th>Channel</th>
-              <th className="col-cur">{curLabel}</th>
-              <th className="col-prev">{priLabel}</th>
-              <th className="col-mom">{comparePctLabel}</th>
-            </tr>
+            {compareActive ? (
+              <>
+                <tr>
+                  <th rowSpan={2}>Channel</th>
+                  {metricKeys.map((k) => (
+                    <th key={k} className="center" colSpan={3}>
+                      {metricLabels[k]}
+                    </th>
+                  ))}
+                </tr>
+                <tr>
+                  {metricKeys.map((k) => (
+                    <Fragment key={k}>
+                      <th className="col-cur">{curLabel}</th>
+                      <th className="col-prev">{priLabel}</th>
+                      <th className="col-mom">{comparePctLabel}</th>
+                    </Fragment>
+                  ))}
+                </tr>
+              </>
+            ) : (
+              <tr>
+                <th>Channel</th>
+                <th className="right">Views</th>
+                <th className="right">Conversions</th>
+                <th className="right">Total Users</th>
+                <th className="right">New Users</th>
+              </tr>
+            )}
           </thead>
           <tbody>
-            {loading && rowsWithColors.length === 0 ? (
+            {loading && channelRows.length === 0 ? (
               <tr>
-                <td colSpan={4} className="cmp-table-loading">
-                  Loading channel comparison…
+                <td colSpan={colCount} className="cmp-table-loading">
+                  Loading channel data…
                 </td>
               </tr>
-            ) : rowsWithColors.length === 0 ? (
+            ) : channelRows.length === 0 ? (
               <tr>
-                <td colSpan={4} className="cmp-table-loading">
+                <td colSpan={colCount} className="cmp-table-loading">
                   No product channel data for this period.
                 </td>
               </tr>
             ) : (
-              rowsWithColors.map((r) => (
+              channelRows.map((r) => (
                 <tr key={r.ch}>
                   <td>
                     <div className="cmp-channel-cell">
@@ -325,37 +544,62 @@ function ProductChannelCmpTable({
                       <span>{r.ch}</span>
                     </div>
                   </td>
-                  <td className="col-cur">{r.cur.toLocaleString()}</td>
-                  <td className="col-prev">{r.cmp.toLocaleString()}</td>
-                  <td className="col-mom">
-                    <Delta value={r.delta} />
-                  </td>
+                  {compareActive ? (
+                    metricKeys.map((k) => (
+                      <MetricCompareCells
+                        key={k}
+                        cur={r.cur[k]}
+                        pri={r.pri[k]}
+                        delta={r.delta[k]}
+                      />
+                    ))
+                  ) : (
+                    <>
+                      <td className="right mono">{fmt(r.cur.views)}</td>
+                      <td className="right mono">{fmt(r.cur.conversions)}</td>
+                      <td className="right mono">{fmt(r.cur.totalUsers)}</td>
+                      <td className="right mono">{fmt(r.cur.newUsers)}</td>
+                    </>
+                  )}
                 </tr>
               ))
             )}
-            {!loading && rowsWithColors.length > 0 ? (
-              <tr className="cmp-tbl-total-row">
-                <td>Total Product Views</td>
-                <td className="col-cur">{totals.cur.toLocaleString()}</td>
-                <td className="col-prev">{totals.cmp.toLocaleString()}</td>
-                <td className="col-mom">
-                  <Delta value={totals.delta} />
-                </td>
+            {!loading && channelRows.length > 0 ? (
+              <tr className="cmp-tbl-total-row cmp-tbl-total-row--plain">
+                <td>Total</td>
+                {compareActive ? (
+                  metricKeys.map((k) => (
+                    <MetricCompareCells
+                      key={k}
+                      cur={totals.cur[k]}
+                      pri={totals.pri[k]}
+                      delta={totals.delta[k]}
+                    />
+                  ))
+                ) : (
+                  <>
+                    <td className="right mono">{fmt(totals.cur.views)}</td>
+                    <td className="right mono">{fmt(totals.cur.conversions)}</td>
+                    <td className="right mono">{fmt(totals.cur.totalUsers)}</td>
+                    <td className="right mono">{fmt(totals.cur.newUsers)}</td>
+                  </>
+                )}
               </tr>
             ) : null}
           </tbody>
         </table>
       </div>
-
-      <div className="vdp-cmp-foot">
-        <span className="vdp-cmp-swatch vdp-cmp-swatch--cur" />
-        {curLabel}
-        <span className="vdp-cmp-swatch vdp-cmp-swatch--prev" />
-        {priLabel}
-        <span className="vdp-cmp-foot-note">
-          {comparePctLabel}: {curLabel} vs {priLabel}
-        </span>
-      </div>
+      {compareActive ? (
+        <div className="vdp-cmp-foot">
+          <div className="vdp-cmp-legend">
+            <span className="leg-cur" /> {curLabel}
+            <span className="leg-prev" /> {priLabel}
+          </div>
+          <div className="vdp-cmp-note">
+            {comparePctLabel}: {curLabel} vs {priLabel}
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -467,13 +711,9 @@ export default function ProductPageViewsPanel({
   }, [data]);
 
   const lineData = useMemo(() => {
-    const runCum = (dates, map) => {
-      let s = 0;
-      return dates.map((d) => {
-        s += Number(map[d]) || 0;
-        return s;
-      });
-    };
+    const dailySeries = (dates, map) =>
+      dates.map((d) => Number(map[d]) || 0);
+
     if (compareActive) {
       const n = Math.max(curDates.length, priDates.length, 1);
       const labels = Array.from({ length: n }, (_, i) => `Day ${i + 1}`);
@@ -482,7 +722,7 @@ export default function ProductPageViewsPanel({
         datasets: [
           {
             label: curLabel || 'Current',
-            data: runCum(curDates, dailyCurMap).concat(
+            data: dailySeries(curDates, dailyCurMap).concat(
               Array(Math.max(0, n - curDates.length)).fill(null)
             ),
             borderColor: '#2563eb',
@@ -495,7 +735,7 @@ export default function ProductPageViewsPanel({
           },
           {
             label: priLabel || 'Prior',
-            data: runCum(priDates, dailyPriMap).concat(
+            data: dailySeries(priDates, dailyPriMap).concat(
               Array(Math.max(0, n - priDates.length)).fill(null)
             ),
             borderColor: '#94a3b8',
@@ -514,7 +754,7 @@ export default function ProductPageViewsPanel({
       datasets: [
         {
           label: curLabel || formatRangeLabel(from, to),
-          data: runCum(curDates, dailyCurMap),
+          data: dailySeries(curDates, dailyCurMap),
           borderColor: '#2563eb',
           backgroundColor: 'rgba(37,99,235,.08)',
           fill: true,
@@ -696,8 +936,8 @@ export default function ProductPageViewsPanel({
         <>
           <Card
             className="vdp-card--chart"
-            title="Cumulative Product Views"
-            sub={`Running total · ${curLabel} vs ${priLabel}`}
+            title="Daily Product Views"
+            sub={`Views per day · ${curLabel} vs ${priLabel}`}
             style={{ marginBottom: 16 }}
           >
             <VdpChart type="line" data={lineData} options={lineOptions} height={180} />
@@ -728,6 +968,7 @@ export default function ProductPageViewsPanel({
             </Card>
           </div>
 
+          {/* Source + Direct/Collection charts — hidden for now
           <Card
             className="vdp-card--chart"
             title="Product Views by Source"
@@ -790,29 +1031,33 @@ export default function ProductPageViewsPanel({
               )}
             </Card>
           </div>
+          */}
         </>
       ) : (
         <>
-          <div className="vdp-grid-2 vdp-grid-2--overview">
-            <Card
-              title="Cumulative Product Views"
-              sub={`Running total · ${curLabel}`}
-            >
-              <VdpChart type="line" data={lineData} options={lineOptions} height={180} />
-            </Card>
-            <Card
-              title={topTitle}
-              sub="Current period · chipper_pfm_ga4_data"
-              actions={topActions}
-            >
-              <TopProductsTable
-                rows={displayProducts}
-                scroll={topMode === 'all'}
-                labelMode={labelMode}
-              />
-            </Card>
-          </div>
+          <Card
+            className="vdp-card--chart"
+            title="Daily Product Views"
+            sub={`Views per day · ${curLabel}`}
+            style={{ marginBottom: 16 }}
+          >
+            <VdpChart type="line" data={lineData} options={lineOptions} height={180} />
+          </Card>
 
+          <Card
+            title={topTitle}
+            sub="Current period · chipper_pfm_ga4_data"
+            actions={topActions}
+            style={{ marginBottom: 16 }}
+          >
+            <TopProductsTable
+              rows={displayProducts}
+              scroll={topMode === 'all'}
+              labelMode={labelMode}
+            />
+          </Card>
+
+          {/* Source + Direct/Collection charts — hidden for now
           <div className="vdp-grid-2 vdp-grid-2--overview">
             <Card
               title="Product Views by Source"
@@ -852,14 +1097,16 @@ export default function ProductPageViewsPanel({
               )}
             </Card>
           </div>
+          */}
         </>
       )}
 
-      <ProductChannelCmpTable
-        curRows={data?.channelsCurrent || []}
+      <ProductChannelTable
+        rows={data?.channelsCurrent || []}
         priRows={data?.channelsPrior || []}
         curLabel={curLabel}
         priLabel={priLabel}
+        compareActive={compareActive && showCompare}
         comparePctLabel={comparePctLabel}
         loading={loading}
       />

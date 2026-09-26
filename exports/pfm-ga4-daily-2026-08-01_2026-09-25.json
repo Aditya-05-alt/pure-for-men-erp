@@ -1,0 +1,566 @@
+{
+  "from": "2026-08-01",
+  "to": "2026-09-25",
+  "rows": [
+    {
+      "client_id": "001",
+      "report_date": "2026-08-01",
+      "ga4_property_id": "387861212",
+      "account_name": "Pure for Men",
+      "total_users": 1686,
+      "new_users": 1484,
+      "conversions": 24,
+      "revenue": 1332.73675
+    },
+    {
+      "client_id": "001",
+      "report_date": "2026-08-02",
+      "ga4_property_id": "387861212",
+      "account_name": "Pure for Men",
+      "total_users": 1758,
+      "new_users": 1560,
+      "conversions": 24,
+      "revenue": 1258.753796
+    },
+    {
+      "client_id": "001",
+      "report_date": "2026-08-03",
+      "ga4_property_id": "387861212",
+      "account_name": "Pure for Men",
+      "total_users": 2700,
+      "new_users": 2410,
+      "conversions": 27,
+      "revenue": 1188.722398
+    },
+    {
+      "client_id": "001",
+      "report_date": "2026-08-04",
+      "ga4_property_id": "387861212",
+      "account_name": "Pure for Men",
+      "total_users": 2084,
+      "new_users": 1845,
+      "conversions": 31,
+      "revenue": 1488.11594
+    },
+    {
+      "client_id": "001",
+      "report_date": "2026-08-05",
+      "ga4_property_id": "387861212",
+      "account_name": "Pure for Men",
+      "total_users": 2204,
+      "new_users": 1987,
+      "conversions": 30,
+      "revenue": 1650.8885100000002
+    },
+    {
+      "client_id": "001",
+      "report_date": "2026-08-06",
+      "ga4_property_id": "387861212",
+      "account_name": "Pure for Men",
+      "total_users": 3290,
+      "new_users": 3050,
+      "conversions": 22,
+      "revenue": 1156.707591
+    },
+    {
+      "client_id": "001",
+      "report_date": "2026-08-07",
+      "ga4_property_id": "387861212",
+      "account_name": "Pure for Men",
+      "total_users": 1998,
+      "new_users": 1788,
+      "conversions": 20,
+      "revenue": 953.4484199999999
+    },
+    {
+      "client_id": "001",
+      "report_date": "2026-08-08",
+      "ga4_property_id": "387861212",
+      "account_name": "Pure for Men",
+      "total_users": 1880,
+      "new_users": 1687,
+      "conversions": 22,
+      "revenue": 1188.759069
+    },
+    {
+      "client_id": "001",
+      "report_date": "2026-08-09",
+      "ga4_property_id": "387861212",
+      "account_name": "Pure for Men",
+      "total_users": 1732,
+      "new_users": 1553,
+      "conversions": 13,
+      "revenue": 521.104162
+    },
+    {
+      "client_id": "001",
+      "report_date": "2026-08-10",
+      "ga4_property_id": "387861212",
+      "account_name": "Pure for Men",
+      "total_users": 1741,
+      "new_users": 1559,
+      "conversions": 21,
+      "revenue": 1281.454396
+    },
+    {
+      "client_id": "001",
+      "report_date": "2026-08-11",
+      "ga4_property_id": "387861212",
+      "account_name": "Pure for Men",
+      "total_users": 1948,
+      "new_users": 1742,
+      "conversions": 22,
+      "revenue": 980.068474
+    },
+    {
+      "client_id": "001",
+      "report_date": "2026-08-12",
+      "ga4_property_id": "387861212",
+      "account_name": "Pure for Men",
+      "total_users": 1872,
+      "new_users": 1648,
+      "conversions": 24,
+      "revenue": 1257.8273049999998
+    },
+    {
+      "client_id": "001",
+      "report_date": "2026-08-13",
+      "ga4_property_id": "387861212",
+      "account_name": "Pure for Men",
+      "total_users": 2277,
+      "new_users": 2021,
+      "conversions": 30,
+      "revenue": 1887.2011039999998
+    },
+    {
+      "client_id": "001",
+      "report_date": "2026-08-14",
+      "ga4_property_id": "387861212",
+      "account_name": "Pure for Men",
+      "total_users": 1813,
+      "new_users": 1605,
+      "conversions": 25,
+      "revenue": 1209.155239
+    },
+    {
+      "client_id": "001",
+      "report_date": "2026-08-15",
+      "ga4_property_id": "387861212",
+      "account_name": "Pure for Men",
+      "total_users": 1648,
+      "new_users": 1481,
+      "conversions": 18,
+      "revenue": 826.227549
+    },
+    {
+      "client_id": "001",
+      "report_date": "2026-08-16",
+      "ga4_property_id": "387861212",
+      "account_name": "Pure for Men",
+      "total_users": 1876,
+      "new_users": 1704,
+      "conversions": 29,
+      "revenue": 1885.5379070000001
+    },
+    {
+      "client_id": "001",
+      "report_date": "2026-08-17",
+      "ga4_property_id": "387861212",
+      "account_name": "Pure for Men",
+      "total_users": 2072,
+      "new_users": 1904,
+      "conversions": 30,
+      "revenue": 1659.899826
+    },
+    {
+      "client_id": "001",
+      "report_date": "2026-08-18",
+      "ga4_property_id": "387861212",
+      "account_name": "Pure for Men",
+      "total_users": 2090,
+      "new_users": 1928,
+      "conversions": 36,
+      "revenue": 1840.8842610000002
+    },
+    {
+      "client_id": "001",
+      "report_date": "2026-08-19",
+      "ga4_property_id": "387861212",
+      "account_name": "Pure for Men",
+      "total_users": 2773,
+      "new_users": 2608,
+      "conversions": 24,
+      "revenue": 1052.768738
+    },
+    {
+      "client_id": "001",
+      "report_date": "2026-08-20",
+      "ga4_property_id": "387861212",
+      "account_name": "Pure for Men",
+      "total_users": 2098,
+      "new_users": 1922,
+      "conversions": 17,
+      "revenue": 989.807951
+    },
+    {
+      "client_id": "001",
+      "report_date": "2026-08-21",
+      "ga4_property_id": "387861212",
+      "account_name": "Pure for Men",
+      "total_users": 2294,
+      "new_users": 2152,
+      "conversions": 19,
+      "revenue": 1119.0735470000002
+    },
+    {
+      "client_id": "001",
+      "report_date": "2026-08-22",
+      "ga4_property_id": "387861212",
+      "account_name": "Pure for Men",
+      "total_users": 1951,
+      "new_users": 1798,
+      "conversions": 24,
+      "revenue": 1043.968234
+    },
+    {
+      "client_id": "001",
+      "report_date": "2026-08-23",
+      "ga4_property_id": "387861212",
+      "account_name": "Pure for Men",
+      "total_users": 1845,
+      "new_users": 1689,
+      "conversions": 30,
+      "revenue": 1458.234941
+    },
+    {
+      "client_id": "001",
+      "report_date": "2026-08-24",
+      "ga4_property_id": "387861212",
+      "account_name": "Pure for Men",
+      "total_users": 2010,
+      "new_users": 1814,
+      "conversions": 25,
+      "revenue": 1266.3715320000001
+    },
+    {
+      "client_id": "001",
+      "report_date": "2026-08-25",
+      "ga4_property_id": "387861212",
+      "account_name": "Pure for Men",
+      "total_users": 2205,
+      "new_users": 2017,
+      "conversions": 27,
+      "revenue": 1586.330161
+    },
+    {
+      "client_id": "001",
+      "report_date": "2026-08-26",
+      "ga4_property_id": "387861212",
+      "account_name": "Pure for Men",
+      "total_users": 2419,
+      "new_users": 2258,
+      "conversions": 31,
+      "revenue": 1557.877334
+    },
+    {
+      "client_id": "001",
+      "report_date": "2026-08-27",
+      "ga4_property_id": "387861212",
+      "account_name": "Pure for Men",
+      "total_users": 1926,
+      "new_users": 1759,
+      "conversions": 18,
+      "revenue": 745.155062
+    },
+    {
+      "client_id": "001",
+      "report_date": "2026-08-28",
+      "ga4_property_id": "387861212",
+      "account_name": "Pure for Men",
+      "total_users": 2155,
+      "new_users": 1992,
+      "conversions": 11,
+      "revenue": 798.8013550000001
+    },
+    {
+      "client_id": "001",
+      "report_date": "2026-08-29",
+      "ga4_property_id": "387861212",
+      "account_name": "Pure for Men",
+      "total_users": 1825,
+      "new_users": 1701,
+      "conversions": 17,
+      "revenue": 806.9489219999999
+    },
+    {
+      "client_id": "001",
+      "report_date": "2026-08-30",
+      "ga4_property_id": "387861212",
+      "account_name": "Pure for Men",
+      "total_users": 1983,
+      "new_users": 1846,
+      "conversions": 27,
+      "revenue": 1271.9969090000002
+    },
+    {
+      "client_id": "001",
+      "report_date": "2026-08-31",
+      "ga4_property_id": "387861212",
+      "account_name": "Pure for Men",
+      "total_users": 1483,
+      "new_users": 1334,
+      "conversions": 14,
+      "revenue": 1280.779489
+    },
+    {
+      "client_id": "001",
+      "report_date": "2026-09-01",
+      "ga4_property_id": "387861212",
+      "account_name": "Pure for Men",
+      "total_users": 2057,
+      "new_users": 1869,
+      "conversions": 30,
+      "revenue": 1461.743085
+    },
+    {
+      "client_id": "001",
+      "report_date": "2026-09-02",
+      "ga4_property_id": "387861212",
+      "account_name": "Pure for Men",
+      "total_users": 1596,
+      "new_users": 1391,
+      "conversions": 28,
+      "revenue": 1216.015431
+    },
+    {
+      "client_id": "001",
+      "report_date": "2026-09-03",
+      "ga4_property_id": "387861212",
+      "account_name": "Pure for Men",
+      "total_users": 1328,
+      "new_users": 1174,
+      "conversions": 18,
+      "revenue": 855.107111
+    },
+    {
+      "client_id": "001",
+      "report_date": "2026-09-04",
+      "ga4_property_id": "387861212",
+      "account_name": "Pure for Men",
+      "total_users": 2892,
+      "new_users": 2761,
+      "conversions": 21,
+      "revenue": 1410.545985
+    },
+    {
+      "client_id": "001",
+      "report_date": "2026-09-05",
+      "ga4_property_id": "387861212",
+      "account_name": "Pure for Men",
+      "total_users": 2115,
+      "new_users": 1965,
+      "conversions": 24,
+      "revenue": 1443.3014520000002
+    },
+    {
+      "client_id": "001",
+      "report_date": "2026-09-06",
+      "ga4_property_id": "387861212",
+      "account_name": "Pure for Men",
+      "total_users": 1586,
+      "new_users": 1447,
+      "conversions": 22,
+      "revenue": 1123.158299
+    },
+    {
+      "client_id": "001",
+      "report_date": "2026-09-07",
+      "ga4_property_id": "387861212",
+      "account_name": "Pure for Men",
+      "total_users": 1723,
+      "new_users": 1580,
+      "conversions": 31,
+      "revenue": 1392.074067
+    },
+    {
+      "client_id": "001",
+      "report_date": "2026-09-08",
+      "ga4_property_id": "387861212",
+      "account_name": "Pure for Men",
+      "total_users": 1604,
+      "new_users": 1470,
+      "conversions": 19,
+      "revenue": 857.435954
+    },
+    {
+      "client_id": "001",
+      "report_date": "2026-09-09",
+      "ga4_property_id": "387861212",
+      "account_name": "Pure for Men",
+      "total_users": 1740,
+      "new_users": 1598,
+      "conversions": 25,
+      "revenue": 1307.15327
+    },
+    {
+      "client_id": "001",
+      "report_date": "2026-09-10",
+      "ga4_property_id": "387861212",
+      "account_name": "Pure for Men",
+      "total_users": 1740,
+      "new_users": 1556,
+      "conversions": 34,
+      "revenue": 2139.007591
+    },
+    {
+      "client_id": "001",
+      "report_date": "2026-09-11",
+      "ga4_property_id": "387861212",
+      "account_name": "Pure for Men",
+      "total_users": 1541,
+      "new_users": 1419,
+      "conversions": 24,
+      "revenue": 1152.540791
+    },
+    {
+      "client_id": "001",
+      "report_date": "2026-09-12",
+      "ga4_property_id": "387861212",
+      "account_name": "Pure for Men",
+      "total_users": 1584,
+      "new_users": 1445,
+      "conversions": 25,
+      "revenue": 1378.3373179999999
+    },
+    {
+      "client_id": "001",
+      "report_date": "2026-09-13",
+      "ga4_property_id": "387861212",
+      "account_name": "Pure for Men",
+      "total_users": 1736,
+      "new_users": 1631,
+      "conversions": 24,
+      "revenue": 1099.3144399999999
+    },
+    {
+      "client_id": "001",
+      "report_date": "2026-09-14",
+      "ga4_property_id": "387861212",
+      "account_name": "Pure for Men",
+      "total_users": 1616,
+      "new_users": 1482,
+      "conversions": 27,
+      "revenue": 1534.0310590000001
+    },
+    {
+      "client_id": "001",
+      "report_date": "2026-09-15",
+      "ga4_property_id": "387861212",
+      "account_name": "Pure for Men",
+      "total_users": 2112,
+      "new_users": 1932,
+      "conversions": 29,
+      "revenue": 1659.313909
+    },
+    {
+      "client_id": "001",
+      "report_date": "2026-09-16",
+      "ga4_property_id": "387861212",
+      "account_name": "Pure for Men",
+      "total_users": 2081,
+      "new_users": 1900,
+      "conversions": 24,
+      "revenue": 1231.956788
+    },
+    {
+      "client_id": "001",
+      "report_date": "2026-09-17",
+      "ga4_property_id": "387861212",
+      "account_name": "Pure for Men",
+      "total_users": 1923,
+      "new_users": 1749,
+      "conversions": 21,
+      "revenue": 1059.484969
+    },
+    {
+      "client_id": "001",
+      "report_date": "2026-09-18",
+      "ga4_property_id": "387861212",
+      "account_name": "Pure for Men",
+      "total_users": 1697,
+      "new_users": 1572,
+      "conversions": 21,
+      "revenue": 854.961658
+    },
+    {
+      "client_id": "001",
+      "report_date": "2026-09-19",
+      "ga4_property_id": "387861212",
+      "account_name": "Pure for Men",
+      "total_users": 1845,
+      "new_users": 1707,
+      "conversions": 23,
+      "revenue": 1129.1399999999999
+    },
+    {
+      "client_id": "001",
+      "report_date": "2026-09-20",
+      "ga4_property_id": "387861212",
+      "account_name": "Pure for Men",
+      "total_users": 1903,
+      "new_users": 1778,
+      "conversions": 24,
+      "revenue": 1290.3676910000001
+    },
+    {
+      "client_id": "001",
+      "report_date": "2026-09-21",
+      "ga4_property_id": "387861212",
+      "account_name": "Pure for Men",
+      "total_users": 1860,
+      "new_users": 1755,
+      "conversions": 27,
+      "revenue": 1724.124774
+    },
+    {
+      "client_id": "001",
+      "report_date": "2026-09-22",
+      "ga4_property_id": "387861212",
+      "account_name": "Pure for Men",
+      "total_users": 1737,
+      "new_users": 1583,
+      "conversions": 9,
+      "revenue": 420.957223
+    },
+    {
+      "client_id": "001",
+      "report_date": "2026-09-23",
+      "ga4_property_id": "387861212",
+      "account_name": "Pure for Men",
+      "total_users": 2139,
+      "new_users": 1925,
+      "conversions": 26,
+      "revenue": 1126.989172
+    },
+    {
+      "client_id": "001",
+      "report_date": "2026-09-24",
+      "ga4_property_id": "387861212",
+      "account_name": "Pure for Men",
+      "total_users": 1853,
+      "new_users": 1664,
+      "conversions": 21,
+      "revenue": 721.9781380000001
+    },
+    {
+      "client_id": "001",
+      "report_date": "2026-09-25",
+      "ga4_property_id": "387861212",
+      "account_name": "Pure for Men",
+      "total_users": 1764,
+      "new_users": 1596,
+      "conversions": 25,
+      "revenue": 1115.168987
+    }
+  ]
+}

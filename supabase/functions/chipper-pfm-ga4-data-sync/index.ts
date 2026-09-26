@@ -9,9 +9,12 @@ import { JWT } from "npm:google-auth-library@9.0.0";
  * - Full delete + re-pull for each pending day
  * - Newest days first so settling window never loses to budget timeouts
  * - days_back coerced safely (string/number)
+ * - Also upserts site-level daily KPIs (no returning users):
+ *   total_users, new_users, conversions, revenue → chipper_pfm_ga4_daily
  *
  * Tables:
  * - chipper_pfm_ga4_data
+ * - chipper_pfm_ga4_daily
  * - chipper_pfm_ga4_config
  * - chipper_pfm_ga4_day_complete
  */
@@ -24,6 +27,7 @@ const corsHeaders = {
 };
 
 const PAGE_TABLE = "chipper_pfm_ga4_data";
+const DAILY_TABLE = "chipper_pfm_ga4_daily";
 const CONFIG_TABLE = "chipper_pfm_ga4_config";
 const COMPLETE_TABLE = "chipper_pfm_ga4_day_complete";
 const CHUNK_SIZE = 500;
@@ -31,6 +35,15 @@ const GLOBAL_BUDGET_MS = 145_000;
 const DEALER_BUDGET_MS = 135_000;
 const PAGE_SIZE = 1500;
 const SETTLING_DAYS = 5;
+
+/** GA4 date dimension is YYYYMMDD → ISO date. */
+function ymdFromGa4(raw: unknown): string {
+  const s = String(raw || "");
+  if (/^\d{8}$/.test(s)) {
+    return `${s.slice(0, 4)}-${s.slice(4, 6)}-${s.slice(6, 8)}`;
+  }
+  return s.slice(0, 10);
+}
 
 /** Dealers that store pathname+query in page_path_q_s (page_path stays pathname-only). */
 /** Destination Cycle + XGRID + Jay's Power Center (Dealer Spike query VDPs). */
@@ -381,8 +394,101 @@ serve(async (req) => {
       }
     }
 
+    /**
+     * Site-level daily KPIs for the window (one GA4 call).
+     * Metrics: totalUsers, newUsers, conversions, purchaseRevenue.
+     * Does NOT fetch returning users. Soft-fails if table/API unavailable.
+     */
+    async function syncDailyKpis(opts: {
+      clientId: string;
+      propertyId: string;
+      accountName: string;
+      from: string;
+      to: string;
+      token: string;
+    }): Promise<{ days: number; error?: string }> {
+      const { clientId, propertyId, accountName, from, to, token } = opts;
+      try {
+        const res = await fetch(
+          `https://analyticsdata.googleapis.com/v1beta/properties/${propertyId}:runReport`,
+          {
+            method: "POST",
+            headers: {
+              Authorization: `Bearer ${token}`,
+              "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+              dateRanges: [{ startDate: from, endDate: to }],
+              dimensions: [{ name: "date" }],
+              metrics: [
+                { name: "totalUsers" },
+                { name: "newUsers" },
+                { name: "conversions" },
+                { name: "purchaseRevenue" },
+              ],
+              orderBys: [{ dimension: { dimensionName: "date" } }],
+              limit: 10000,
+            }),
+          },
+        );
+
+        if (!res.ok) {
+          const txt = await res.text();
+          return {
+            days: 0,
+            error: `GA4 daily ${res.status}: ${txt.slice(0, 200)}`,
+          };
+        }
+
+        const payload = await res.json();
+        const rows = (payload.rows || []).map(
+          (row: {
+            dimensionValues?: { value?: string }[];
+            metricValues?: { value?: string }[];
+          }) => {
+            const dv = row.dimensionValues || [];
+            const mv = row.metricValues || [];
+            return {
+              client_id: clientId,
+              report_date: ymdFromGa4(dv[0]?.value),
+              ga4_property_id: propertyId,
+              account_name: accountName,
+              total_users: parseInt(mv[0]?.value || "0", 10) || 0,
+              new_users: parseInt(mv[1]?.value || "0", 10) || 0,
+              conversions: Number(mv[2]?.value || "0") || 0,
+              revenue: Number(mv[3]?.value || "0") || 0,
+              updated_at: new Date().toISOString(),
+            };
+          },
+        );
+
+        if (!rows.length) {
+          log(
+            `   DAILY [${accountName}] ${from}→${to}: 0 rows from GA4`,
+          );
+          return { days: 0 };
+        }
+
+        const { error } = await supabase.from(DAILY_TABLE).upsert(rows, {
+          onConflict: "client_id,report_date",
+        });
+        if (error) {
+          return { days: 0, error: `daily upsert: ${error.message}` };
+        }
+
+        log(
+          `   DAILY [${accountName}] ${from}→${to}: upserted ${rows.length} day(s) (users/new/conv/revenue)`,
+        );
+        return { days: rows.length };
+      } catch (ex: unknown) {
+        const msg = ex instanceof Error ? ex.message : String(ex);
+        return { days: 0, error: msg };
+      }
+    }
+
     const dealerSummary: Record<string, unknown>[] = [];
     let totalGlobalRows = 0;
+    let totalDailyDays = 0;
     let cutoffReached = false;
 
     for (const dealer of dealers) {
@@ -411,6 +517,31 @@ serve(async (req) => {
           usePathQs ? " · page_path_q_s" : ""
         }`,
       );
+
+      let dailyDays = 0;
+      let dailyError: string | undefined;
+      try {
+        // Always refresh site-level daily KPIs for the sync window
+        // (independent of page-grain complete markers).
+        const dailyRes = await syncDailyKpis({
+          clientId: CLIENT_ID,
+          propertyId,
+          accountName,
+          from: dateFrom,
+          to: dateTo,
+          token: accessToken,
+        });
+        dailyDays = dailyRes.days;
+        dailyError = dailyRes.error;
+        totalDailyDays += dailyDays;
+        if (dailyError) {
+          log(`   WARN DAILY [${accountName}]: ${dailyError}`);
+        }
+      } catch (dailyEx: unknown) {
+        dailyError =
+          dailyEx instanceof Error ? dailyEx.message : String(dailyEx);
+        log(`   WARN DAILY [${accountName}] exception: ${dailyError}`);
+      }
 
       try {
         // Soft-fail if marker table missing - still re-fetch settling window.
@@ -447,11 +578,16 @@ serve(async (req) => {
           dealerSummary.push({
             client_id: CLIENT_ID,
             account_name: accountName,
-            status: "complete",
+            status: dailyError ? "partial" : "complete",
             days_pending: 0,
             rows_inserted: 0,
+            daily_kpi_days: dailyDays,
+            daily_kpi_error: dailyError || null,
           });
-          await safeStatusUpdate(CLIENT_ID, "ok");
+          await safeStatusUpdate(
+            CLIENT_ID,
+            dailyError ? "partial" : "ok",
+          );
           continue;
         }
 
@@ -695,12 +831,15 @@ serve(async (req) => {
         }
 
         totalGlobalRows += dealerRows;
+        const pageErrors = dealerErrors.length;
         dealerSummary.push({
           client_id: CLIENT_ID,
           account_name: accountName,
-          status: dealerErrors.length === 0 ? "ok" : "partial",
+          status: pageErrors === 0 && !dailyError ? "ok" : "partial",
           days_completed: dealerDays,
           rows_inserted: dealerRows,
+          daily_kpi_days: dailyDays,
+          daily_kpi_error: dailyError || null,
           page_path_q_s_mode: usePathQs,
           admin_aligned: true,
           errors: dealerErrors.slice(0, 5),
@@ -708,7 +847,7 @@ serve(async (req) => {
 
         await safeStatusUpdate(
           CLIENT_ID,
-          dealerErrors.length === 0 ? "ok" : "partial",
+          pageErrors === 0 && !dailyError ? "ok" : "partial",
         );
       } catch (dealerEx: unknown) {
         const msg =
@@ -728,7 +867,7 @@ serve(async (req) => {
 
     const elapsedMs = Date.now() - startTime;
     log(
-      `\n=== DONE - ${totalGlobalRows} rows across ${dealerSummary.length} dealers in ${elapsedMs}ms ===`,
+      `\n=== DONE - ${totalGlobalRows} page rows, ${totalDailyDays} daily KPI day(s) across ${dealerSummary.length} dealers in ${elapsedMs}ms ===`,
     );
 
     return jsonRes({
@@ -740,6 +879,8 @@ serve(async (req) => {
       force_refresh: forceRefresh,
       admin_aligned: true,
       newest_first: true,
+      daily_kpi_table: DAILY_TABLE,
+      daily_kpi_days: totalDailyDays,
       total_dealers: dealers.length,
       processed_dealers: dealerSummary.length,
       rows_inserted: totalGlobalRows,

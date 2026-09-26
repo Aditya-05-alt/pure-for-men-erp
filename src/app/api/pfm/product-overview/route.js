@@ -1,14 +1,16 @@
 import { createClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
 import { mapPfmChannelRows } from '@/lib/pfm/channelLabel';
-import { pctChange } from '@/lib/overview/comparePeriod';
-import { loadSourceMapping } from '@/lib/sourceMapping/store';
+import { fetchPfmProductOverviewRange } from '@/lib/api/pfmProductOverviewFetch';
 import {
-  aggregateRawToChannels,
-  toMappingMap,
-} from '@/lib/sourceMapping/apply';
+  enrichChannelsWithKeyEvents,
+  enrichProductsWithItemEcommerce,
+  fetchGa4ChannelKeyEvents,
+  fetchGa4ItemEcommerce,
+} from '@/lib/pfm/ga4ItemEcommerce';
+import { pctChange } from '@/lib/overview/comparePeriod';
 
-export const maxDuration = 60;
+export const maxDuration = 120;
 
 const DEFAULT_CLIENT_ID = '001';
 
@@ -39,6 +41,9 @@ function mapPages(rows) {
     views: Number(r.views) || 0,
     sessions: Number(r.sessions) || 0,
     totalUsers: Number(r.total_users) || 0,
+    newUsers: Number(r.new_users) || 0,
+    conversions: Number(r.conversions) || 0,
+    revenue: Number(r.revenue) || 0,
   }));
 }
 
@@ -63,9 +68,7 @@ function mergeTopProducts(cur, pri) {
   return (cur || []).map((r) => {
     const prior = priMap.get(r.pagePath) || 0;
     const mom =
-      prior < 1 && r.views > 0
-        ? null
-        : pctChange(r.views, prior);
+      prior < 1 && r.views > 0 ? null : pctChange(r.views, prior);
     return {
       ...r,
       priorViews: prior,
@@ -73,37 +76,6 @@ function mergeTopProducts(cur, pri) {
       isNew: prior < 1 && r.views > 0,
     };
   });
-}
-
-function rawRowsFromRpc(data) {
-  return (data || []).map((r) => ({
-    rawSource: r.raw_source,
-    rawMedium: r.raw_medium,
-    pageViews: Number(r.page_views) || 0,
-    vdpViews: Number(r.vdp_views) || 0,
-  }));
-}
-
-/** Prefer mapped product views; fall back to GA4 default channel column. */
-function channelsFromMapping(rawRpcData, mappingCfg, fallbackChannelRows) {
-  const raw = rawRowsFromRpc(rawRpcData);
-  if (!raw.length) return mapPfmChannelRows(fallbackChannelRows);
-
-  const mapped = aggregateRawToChannels(
-    raw,
-    mappingCfg.channels,
-    toMappingMap(mappingCfg.mapping)
-  );
-  return mapped
-    .map((r) => ({
-      channel_bucket: r.name,
-      views: Number(r.vdpViews) || 0,
-    }))
-    .filter((r) => r.views > 0)
-    .sort(
-      (a, b) =>
-        b.views - a.views || a.channel_bucket.localeCompare(b.channel_bucket)
-    );
 }
 
 /**
@@ -137,128 +109,84 @@ export async function GET(request) {
     );
   }
 
-  const [
-    prodDailyCur,
-    prodDailyPri,
-    allDailyCur,
-    allDailyPri,
-    pagesCur,
-    pagesPri,
-    chCur,
-    chPri,
-    shapeCur,
-    shapePri,
-    rawCur,
-    rawPri,
-    mappingCfg,
-  ] = await Promise.all([
-    supabase.rpc('get_pfm_product_page_views_daily', {
-      p_from: from,
-      p_to: to,
-      p_client_id: clientId,
-    }),
-    supabase.rpc('get_pfm_product_page_views_daily', {
-      p_from: priorFrom,
-      p_to: priorTo,
-      p_client_id: clientId,
-    }),
-    supabase.rpc('get_pfm_page_views_daily', {
-      p_from: from,
-      p_to: to,
-      p_client_id: clientId,
-    }),
-    supabase.rpc('get_pfm_page_views_daily', {
-      p_from: priorFrom,
-      p_to: priorTo,
-      p_client_id: clientId,
-    }),
-    supabase.rpc('get_pfm_top_product_pages', {
-      p_from: from,
-      p_to: to,
-      p_client_id: clientId,
-      p_limit: limit,
-    }),
-    supabase.rpc('get_pfm_top_product_pages', {
-      p_from: priorFrom,
-      p_to: priorTo,
-      p_client_id: clientId,
-      p_limit: limit,
-    }),
-    supabase.rpc('get_pfm_product_channel_breakdown', {
-      p_from: from,
-      p_to: to,
-      p_client_id: clientId,
-    }),
-    supabase.rpc('get_pfm_product_channel_breakdown', {
-      p_from: priorFrom,
-      p_to: priorTo,
-      p_client_id: clientId,
-    }),
-    supabase.rpc('get_pfm_product_shape_breakdown', {
-      p_from: from,
-      p_to: to,
-      p_client_id: clientId,
-    }),
-    supabase.rpc('get_pfm_product_shape_breakdown', {
-      p_from: priorFrom,
-      p_to: priorTo,
-      p_client_id: clientId,
-    }),
-    supabase.rpc('get_pfm_raw_source_medium_traffic', {
-      p_from: from,
-      p_to: to,
-      p_client_id: clientId,
-    }),
-    supabase.rpc('get_pfm_raw_source_medium_traffic', {
-      p_from: priorFrom,
-      p_to: priorTo,
-      p_client_id: clientId,
-    }),
-    loadSourceMapping(supabase),
-  ]);
-
-  const firstErr = [
-    prodDailyCur,
-    prodDailyPri,
-    allDailyCur,
-    allDailyPri,
-    pagesCur,
-    pagesPri,
-    chCur,
-    chPri,
-    shapeCur,
-    shapePri,
-  ].find((r) => r.error);
-
-  if (firstErr?.error) {
-    console.error('[pfm/product-overview]', firstErr.error.message);
-    return NextResponse.json(
-      { error: firstErr.error.message },
-      { status: 500 }
-    );
+  let curBundle;
+  let priBundle;
+  try {
+    // Chunked RPCs — long ranges were hitting Postgres statement_timeout.
+    [curBundle, priBundle] = await Promise.all([
+      fetchPfmProductOverviewRange(supabase, {
+        clientId,
+        from,
+        to,
+        limit,
+      }),
+      fetchPfmProductOverviewRange(supabase, {
+        clientId,
+        from: priorFrom,
+        to: priorTo,
+        limit,
+      }),
+    ]);
+  } catch (err) {
+    const message = err?.message || String(err);
+    console.error('[pfm/product-overview]', message);
+    return NextResponse.json({ error: message }, { status: 500 });
   }
 
-  const dailyCurrent = mapDaily(prodDailyCur.data);
-  const dailyPrior = mapDaily(prodDailyPri.data);
-  const allCurrent = mapDaily(allDailyCur.data);
-  const allPrior = mapDaily(allDailyPri.data);
-  const productsCurrent = mapPages(pagesCur.data);
-  const productsPrior = mapPages(pagesPri.data);
+  const dailyCurrent = mapDaily(curBundle.daily);
+  const dailyPrior = mapDaily(priBundle.daily);
+  const allCurrent = mapDaily(curBundle.allDaily);
+  const allPrior = mapDaily(priBundle.allDaily);
+  let productsCurrent = mapPages(curBundle.pages);
+  let productsPrior = mapPages(priBundle.pages);
+
+  // Product page paths don't carry purchase key events in GA4 (those land on
+  // checkout/thank-you). Enrich Top Products from item-scoped ecommerce instead.
+  let itemEcommerceApplied = false;
+  let itemEcommerceError = null;
+  try {
+    const [itemCur, itemPri] = await Promise.all([
+      fetchGa4ItemEcommerce({ from, to }),
+      fetchGa4ItemEcommerce({ from: priorFrom, to: priorTo }),
+    ]);
+    productsCurrent = enrichProductsWithItemEcommerce(productsCurrent, itemCur);
+    productsPrior = enrichProductsWithItemEcommerce(productsPrior, itemPri);
+    itemEcommerceApplied = true;
+  } catch (err) {
+    itemEcommerceError = err?.message || String(err);
+    console.warn(
+      '[pfm/product-overview] item ecommerce enrich failed:',
+      itemEcommerceError
+    );
+  }
 
   const productCurTotal = sumViews(dailyCurrent);
   const productPriTotal = sumViews(dailyPrior);
   const pageCurTotal = sumViews(allCurrent);
   const pagePriTotal = sumViews(allPrior);
 
-  const useMapped =
-    !rawCur.error && !rawPri.error && mappingCfg && !mappingCfg.missingTable;
+  // Always use raw GA4 session channels for product pages (no source-mapping / Unmapped).
+  let channelsCurrent = mapPfmChannelRows(curBundle.channels);
+  let channelsPrior = mapPfmChannelRows(priBundle.channels);
 
-  const channelsCurrent = useMapped
-    ? channelsFromMapping(rawCur.data, mappingCfg, chCur.data)
-    : mapPfmChannelRows(chCur.data);
-  const channelsPrior = useMapped
-    ? channelsFromMapping(rawPri.data, mappingCfg, chPri.data)
-    : mapPfmChannelRows(chPri.data);
+  // Page-path rows don't carry purchase key events — pull channel keyEvents from GA4.
+  let channelKeyEventsApplied = false;
+  let channelKeyEventsError = null;
+  try {
+    const [keCur, kePri] = await Promise.all([
+      fetchGa4ChannelKeyEvents({ from, to }),
+      fetchGa4ChannelKeyEvents({ from: priorFrom, to: priorTo }),
+    ]);
+    channelsCurrent = enrichChannelsWithKeyEvents(channelsCurrent, keCur);
+    channelsPrior = enrichChannelsWithKeyEvents(channelsPrior, kePri);
+    channelKeyEventsApplied = true;
+  } catch (err) {
+    channelKeyEventsError = err?.message || String(err);
+    console.warn(
+      '[pfm/product-overview] channel keyEvents enrich failed:',
+      channelKeyEventsError
+    );
+  }
 
   return NextResponse.json({
     clientId,
@@ -266,7 +194,11 @@ export async function GET(request) {
     to,
     priorFrom,
     priorTo,
-    sourceMappingApplied: Boolean(useMapped),
+    sourceMappingApplied: false,
+    itemEcommerceApplied,
+    itemEcommerceError,
+    channelKeyEventsApplied,
+    channelKeyEventsError,
     totals: {
       productCurrent: productCurTotal,
       productPrior: productPriTotal,
@@ -280,7 +212,7 @@ export async function GET(request) {
     productsPrior,
     channelsCurrent,
     channelsPrior,
-    shapeCurrent: mapShape(shapeCur.data),
-    shapePrior: mapShape(shapePri.data),
+    shapeCurrent: mapShape(curBundle.shape),
+    shapePrior: mapShape(priBundle.shape),
   });
 }

@@ -20,5 +20,8 @@ export function mapPfmChannelRows(rows) {
   return (rows || []).map((r) => ({
     channel_bucket: formatPfmChannelLabel(r.channel_bucket),
     views: Number(r.views) || 0,
+    conversions: Number(r.conversions) || 0,
+    totalUsers: Number(r.total_users) || 0,
+    newUsers: Number(r.new_users) || 0,
   }));
 }

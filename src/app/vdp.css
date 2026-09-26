@@ -2193,15 +2193,33 @@ body:has(.vdp-root) .nav-progress {
   border-top: 1px solid var(--vdp-border);
   color: #0f172a !important;
 }
+.vdp-root .cmp-tbl-total-row--plain td,
+.vdp-root .cmp-tbl tr.cmp-tbl-total-row--plain td,
+.vdp-root .cmp-tbl tr.cmp-tbl-total-row--plain:hover td {
+  background: transparent !important;
+  color: inherit !important;
+  border-top: 1px solid var(--vdp-border);
+  font-weight: 700 !important;
+}
 .vdp-root .cmp-tbl-total-row td.col-cur,
 .vdp-root .cmp-tbl tr:last-child td.col-cur {
   background: rgba(37, 99, 235, 0.28) !important;
   color: #0f172a !important;
 }
+.vdp-root .cmp-tbl-total-row--plain td.col-cur,
+.vdp-root .cmp-tbl tr.cmp-tbl-total-row--plain td.col-cur {
+  background: transparent !important;
+  color: inherit !important;
+}
 .vdp-root .cmp-tbl-total-row td.col-prev,
 .vdp-root .cmp-tbl tr:last-child td.col-prev {
   background: rgba(148, 163, 184, 0.22) !important;
   color: #0f172a !important;
+}
+.vdp-root .cmp-tbl-total-row--plain td.col-prev,
+.vdp-root .cmp-tbl tr.cmp-tbl-total-row--plain td.col-prev {
+  background: transparent !important;
+  color: inherit !important;
 }
 .vdp-root .cmp-tbl-total-row .delta,
 .vdp-root .cmp-tbl .delta.dn {

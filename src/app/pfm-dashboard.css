@@ -305,6 +305,43 @@
   font-weight: 700;
 }
 
+.vdp-root.pfm-dash .cmp-tbl-total-row--plain td,
+.vdp-root.pfm-dash .cmp-tbl tr.cmp-tbl-total-row--plain:hover td {
+  background: transparent !important;
+  color: #fff !important;
+  font-weight: 700;
+  border-top: 1px solid rgba(241, 245, 249, 0.16);
+}
+
+.vdp-root.pfm-dash .cmp-tbl--channels th.right,
+.vdp-root.pfm-dash .cmp-tbl--channels td.right {
+  text-align: right;
+}
+
+.vdp-root.pfm-dash .cmp-tbl--multi-metric th.center {
+  text-align: center;
+  border-bottom: 1px solid rgba(241, 245, 249, 0.12);
+  font-size: 11px;
+  letter-spacing: 0.02em;
+}
+
+.vdp-root.pfm-dash .cmp-tbl--multi-metric th.col-cur,
+.vdp-root.pfm-dash .cmp-tbl--multi-metric th.col-prev,
+.vdp-root.pfm-dash .cmp-tbl--multi-metric th.col-mom {
+  font-size: 10px;
+  white-space: nowrap;
+  max-width: 110px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.vdp-root.pfm-dash .cmp-tbl--multi-metric td.col-cur,
+.vdp-root.pfm-dash .cmp-tbl--multi-metric td.col-prev,
+.vdp-root.pfm-dash .cmp-tbl--multi-metric td.col-mom {
+  font-size: 12px;
+  white-space: nowrap;
+}
+
 .vdp-root.pfm-dash .cmp-table-loading {
   color: var(--pfm-muted) !important;
 }

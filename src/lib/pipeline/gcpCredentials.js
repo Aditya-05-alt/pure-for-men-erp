@@ -95,6 +95,38 @@ function resolveCredentialsPath(filePath) {
 }
 
 /**
+ * Some .env.local files store the service-account JSON as a multiline block
+ * (not a single quoted line). dotenv then only keeps `{`. Recover by reading
+ * the file and extracting the first balanced `{...}` after the key.
+ */
+function extractGcpJsonFromEnvFile() {
+  const envPath = path.join(process.cwd(), '.env.local');
+  if (!fs.existsSync(envPath)) return null;
+  const text = fs.readFileSync(envPath, 'utf8');
+  const marker = 'GCP_SERVICE_ACCOUNT_JSON';
+  const start = text.indexOf(marker);
+  if (start < 0) return null;
+  const after = text.slice(start);
+  const brace = after.indexOf('{');
+  if (brace < 0) return null;
+  let depth = 0;
+  let end = -1;
+  for (let i = brace; i < after.length; i++) {
+    const c = after[i];
+    if (c === '{') depth += 1;
+    else if (c === '}') {
+      depth -= 1;
+      if (depth === 0) {
+        end = i;
+        break;
+      }
+    }
+  }
+  if (end < 0) return null;
+  return after.slice(brace, end + 1);
+}
+
+/**
  * Load credentials from GCP_SERVICE_ACCOUNT_JSON_PATH or GCP_SERVICE_ACCOUNT_JSON.
  */
 export function loadGcpServiceAccountCredentials() {
@@ -110,11 +142,23 @@ export function loadGcpServiceAccountCredentials() {
   }
 
   const inline = process.env.GCP_SERVICE_ACCOUNT_JSON;
-  if (!inline?.trim()) {
-    throw new Error(
-      'Missing GCP credentials. Set GCP_SERVICE_ACCOUNT_JSON_PATH (path to .json key) or GCP_SERVICE_ACCOUNT_JSON in .env.local.'
-    );
+  if (inline?.trim()) {
+    try {
+      return parseServiceAccountJson(inline);
+    } catch (err) {
+      // Fall through to multiline .env.local recovery.
+      if (!String(inline).trim().startsWith('{') || inline.trim().length > 8) {
+        throw err;
+      }
+    }
   }
 
-  return parseServiceAccountJson(inline);
+  const recovered = extractGcpJsonFromEnvFile();
+  if (recovered) {
+    return parseServiceAccountJson(recovered);
+  }
+
+  throw new Error(
+    'Missing GCP credentials. Set GCP_SERVICE_ACCOUNT_JSON_PATH (path to .json key) or GCP_SERVICE_ACCOUNT_JSON in .env.local.'
+  );
 }
