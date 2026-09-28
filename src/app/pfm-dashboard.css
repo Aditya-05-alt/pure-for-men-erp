@@ -233,6 +233,22 @@
   background: var(--pfm-panel);
 }
 
+.vdp-root.pfm-dash .vdp-top-vehicles-scroll--fit {
+  max-height: none;
+  overflow: visible;
+}
+
+.vdp-root.pfm-dash .vdp-table tfoot .vdp-table-total-row td {
+  position: sticky;
+  bottom: 0;
+  z-index: 1;
+  background: var(--pfm-panel);
+  color: #fff;
+  font-weight: 700;
+  border-top: 1px solid rgba(241, 245, 249, 0.16);
+  border-bottom: none;
+}
+
 .vdp-root.pfm-dash .vdp-product-url {
   color: var(--pfm-accent-hot);
 }

@@ -20,7 +20,7 @@ export default function LoginStsTracker() {
 
     if (!sessionLoggedRef.current) {
       sessionLoggedRef.current = true;
-      trackLoginSts({ eventType: 'session_start', eventAction: 'dashboard' });
+      trackLoginSts({ eventType: 'session_start', eventAction: pathname });
     }
 
     if (lastPathRef.current !== pathname) {

@@ -1,9 +1,9 @@
 /**
- * Temporary Pure for Men login — hardcoded until real auth is wired.
- * Flip HARDCODED_LOGIN_ENABLED off when connecting Supabase / SSO later.
+ * Legacy hardcoded Pure for Men login. Off now that Supabase Auth is wired —
+ * flip back to true only as an emergency fallback.
  */
 
-export const HARDCODED_LOGIN_ENABLED = true;
+export const HARDCODED_LOGIN_ENABLED = false;
 
 export const PFM_LOGIN_EMAIL = 'admin@pureformen.com';
 export const PFM_LOGIN_PASSWORD = 'StayReady1!';

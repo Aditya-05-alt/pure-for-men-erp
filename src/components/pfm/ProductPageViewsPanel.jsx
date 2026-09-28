@@ -151,15 +151,26 @@ function TopProductsTable({ rows, scroll, labelMode = 'title' }) {
     );
   }
   const showTitle = labelMode === 'title';
+  const totals = rows.reduce(
+    (acc, r) => {
+      acc.views += Number(r.views) || 0;
+      acc.conversions += Number(r.conversions) || 0;
+      acc.totalUsers += Number(r.totalUsers) || 0;
+      acc.newUsers += Number(r.newUsers) || 0;
+      return acc;
+    },
+    { views: 0, conversions: 0, totalUsers: 0, newUsers: 0 }
+  );
   const table = (
     <table className="vdp-table">
       <thead>
         <tr>
           <th>{showTitle ? 'Page title' : 'URL'}</th>
           <th className="right">Views</th>
-          <th className="right">Conversions</th>
+          {/* <th className="right">Conversions</th> */}
           <th className="right">Total Users</th>
           <th className="right">New Users</th>
+          <th className="right">Returning Users</th>
           {/* <th className="right">Revenue</th> */}
         </tr>
       </thead>
@@ -187,18 +198,40 @@ function TopProductsTable({ rows, scroll, labelMode = 'title' }) {
                 )}
               </td>
               <td className="right mono">{fmt(r.views)}</td>
-              <td className="right mono">{fmt(r.conversions)}</td>
+              {/* <td className="right mono">{fmt(r.conversions)}</td> */}
               <td className="right mono">{fmt(r.totalUsers)}</td>
               <td className="right mono">{fmt(r.newUsers)}</td>
+              <td className="right mono">
+                {fmt(returningUsers(r.totalUsers, r.newUsers))}
+              </td>
               {/* <td className="right mono">{formatMoney(r.revenue)}</td> */}
             </tr>
           );
         })}
       </tbody>
+      <tfoot>
+        <tr className="vdp-table-total-row">
+          <td>Total</td>
+          <td className="right mono">{fmt(totals.views)}</td>
+          {/* <td className="right mono">{fmt(totals.conversions)}</td> */}
+          <td className="right mono">{fmt(totals.totalUsers)}</td>
+          <td className="right mono">{fmt(totals.newUsers)}</td>
+          <td className="right mono">
+            {fmt(returningUsers(totals.totalUsers, totals.newUsers))}
+          </td>
+        </tr>
+      </tfoot>
     </table>
   );
-  if (!scroll) return table;
-  return <div className="vdp-top-vehicles-scroll">{table}</div>;
+  return (
+    <div
+      className={`vdp-top-vehicles-scroll${
+        scroll ? '' : ' vdp-top-vehicles-scroll--fit'
+      }`}
+    >
+      {table}
+    </div>
+  );
 }
 
 function TopProductsLimitSelect({ value, onChange }) {
@@ -229,21 +262,29 @@ function TopProductsLabelSelect({ value, onChange }) {
   );
 }
 
+function returningUsers(totalUsers, newUsers) {
+  return Math.max((Number(totalUsers) || 0) - (Number(newUsers) || 0), 0);
+}
+
 function emptyChannelMetrics() {
   return {
     views: 0,
     conversions: 0,
     totalUsers: 0,
     newUsers: 0,
+    returningUsers: 0,
   };
 }
 
 function metricsFromChannelRow(r) {
+  const totalUsers = Number(r?.totalUsers) || 0;
+  const newUsers = Number(r?.newUsers) || 0;
   return {
     views: Number(r?.views) || 0,
     conversions: Number(r?.conversions) || 0,
-    totalUsers: Number(r?.totalUsers) || 0,
-    newUsers: Number(r?.newUsers) || 0,
+    totalUsers,
+    newUsers,
+    returningUsers: returningUsers(totalUsers, newUsers),
   };
 }
 
@@ -269,6 +310,7 @@ function mergeChannelMetricComparison(curRows, priRows) {
         conversions: pctChange(cur.conversions, pri.conversions),
         totalUsers: pctChange(cur.totalUsers, pri.totalUsers),
         newUsers: pctChange(cur.newUsers, pri.newUsers),
+        returningUsers: pctChange(cur.returningUsers, pri.returningUsers),
       },
     };
   });
@@ -286,10 +328,12 @@ function mergeChannelMetricComparison(curRows, priRows) {
     totalsCur.conversions += r.cur.conversions;
     totalsCur.totalUsers += r.cur.totalUsers;
     totalsCur.newUsers += r.cur.newUsers;
+    totalsCur.returningUsers += r.cur.returningUsers;
     totalsPri.views += r.pri.views;
     totalsPri.conversions += r.pri.conversions;
     totalsPri.totalUsers += r.pri.totalUsers;
     totalsPri.newUsers += r.pri.newUsers;
+    totalsPri.returningUsers += r.pri.returningUsers;
   }
 
   return {
@@ -302,6 +346,10 @@ function mergeChannelMetricComparison(curRows, priRows) {
         conversions: pctChange(totalsCur.conversions, totalsPri.conversions),
         totalUsers: pctChange(totalsCur.totalUsers, totalsPri.totalUsers),
         newUsers: pctChange(totalsCur.newUsers, totalsPri.newUsers),
+        returningUsers: pctChange(
+          totalsCur.returningUsers,
+          totalsPri.returningUsers
+        ),
       },
     },
   };
@@ -357,6 +405,7 @@ function ProductChannelTable({
         acc.conversions += r.cur.conversions;
         acc.totalUsers += r.cur.totalUsers;
         acc.newUsers += r.cur.newUsers;
+        acc.returningUsers += r.cur.returningUsers;
         return acc;
       },
       emptyChannelMetrics()
@@ -364,14 +413,21 @@ function ProductChannelTable({
     return { cur };
   }, [compareActive, comparison.totals, channelRows]);
 
-  const colCount = compareActive ? 13 : 5;
-  const metricKeys = ['views', 'conversions', 'totalUsers', 'newUsers'];
+  const metricKeys = [
+    'views',
+    // 'conversions',
+    'totalUsers',
+    'newUsers',
+    'returningUsers',
+  ];
   const metricLabels = {
     views: 'Views',
     conversions: 'Conversions',
     totalUsers: 'Total Users',
     newUsers: 'New Users',
+    returningUsers: 'Returning Users',
   };
+  const colCount = 1 + metricKeys.length * (compareActive ? 3 : 1);
 
   const fmtDelta = (n) => `${n >= 0 ? '+' : ''}${n}%`;
 
@@ -412,29 +468,13 @@ function ProductChannelTable({
       );
     } else {
       lines.push(
-        ['Channel', 'Views', 'Conversions', 'Total Users', 'New Users'].join(
-          '\t'
-        )
+        ['Channel', ...metricKeys.map((k) => metricLabels[k])].join('\t')
       );
       channelRows.forEach((r) => {
-        lines.push(
-          [
-            r.ch,
-            r.cur.views,
-            r.cur.conversions,
-            r.cur.totalUsers,
-            r.cur.newUsers,
-          ].join('\t')
-        );
+        lines.push([r.ch, ...metricKeys.map((k) => r.cur[k])].join('\t'));
       });
       lines.push(
-        [
-          'Total',
-          totals.cur.views,
-          totals.cur.conversions,
-          totals.cur.totalUsers,
-          totals.cur.newUsers,
-        ].join('\t')
+        ['Total', ...metricKeys.map((k) => totals.cur[k])].join('\t')
       );
     }
     navigator.clipboard
@@ -464,7 +504,7 @@ function ProductChannelTable({
           <div className="vdp-cardsub" style={{ marginBottom: 0 }}>
             {compareActive
               ? `${curLabel} vs ${priLabel} · ${comparePctLabel} · all metrics`
-              : `${curLabel} · GA4 session channels · Conversions (key events)`}
+              : `${curLabel} · GA4 session channels`}
           </div>
         </div>
         <div className="vdp-cmp-head-actions">
@@ -512,10 +552,11 @@ function ProductChannelTable({
             ) : (
               <tr>
                 <th>Channel</th>
-                <th className="right">Views</th>
-                <th className="right">Conversions</th>
-                <th className="right">Total Users</th>
-                <th className="right">New Users</th>
+                {metricKeys.map((k) => (
+                  <th key={k} className="right">
+                    {metricLabels[k]}
+                  </th>
+                ))}
               </tr>
             )}
           </thead>
@@ -554,12 +595,11 @@ function ProductChannelTable({
                       />
                     ))
                   ) : (
-                    <>
-                      <td className="right mono">{fmt(r.cur.views)}</td>
-                      <td className="right mono">{fmt(r.cur.conversions)}</td>
-                      <td className="right mono">{fmt(r.cur.totalUsers)}</td>
-                      <td className="right mono">{fmt(r.cur.newUsers)}</td>
-                    </>
+                    metricKeys.map((k) => (
+                      <td key={k} className="right mono">
+                        {fmt(r.cur[k])}
+                      </td>
+                    ))
                   )}
                 </tr>
               ))
@@ -577,12 +617,11 @@ function ProductChannelTable({
                     />
                   ))
                 ) : (
-                  <>
-                    <td className="right mono">{fmt(totals.cur.views)}</td>
-                    <td className="right mono">{fmt(totals.cur.conversions)}</td>
-                    <td className="right mono">{fmt(totals.cur.totalUsers)}</td>
-                    <td className="right mono">{fmt(totals.cur.newUsers)}</td>
-                  </>
+                  metricKeys.map((k) => (
+                    <td key={k} className="right mono">
+                      {fmt(totals.cur[k])}
+                    </td>
+                  ))
                 )}
               </tr>
             ) : null}
@@ -649,7 +688,7 @@ export default function ProductPageViewsPanel({
         to,
         priorFrom,
         priorTo,
-        limit: 200,
+        limit: 10000,
       });
       if (cancelRef.current || genRef.current !== gen) return;
       setData(json);

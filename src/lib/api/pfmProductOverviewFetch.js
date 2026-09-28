@@ -3,6 +3,8 @@ import { rpcByDateChunks } from '@/lib/api/chunkedRpc';
 /** Days per RPC window — keeps product-page scans under statement_timeout. */
 export const PFM_OVERVIEW_CHUNK_DAYS = 14;
 export const PFM_OVERVIEW_CHUNK_CONCURRENCY = 2;
+/** Per-window page cap — high enough that no product page is dropped before merge. */
+const PFM_PAGES_PER_CHUNK = 10000;
 
 async function fetchRange(supabase, rpcName, clientId, from, to, extraParams = {}) {
   const rows = await rpcByDateChunks(supabase, rpcName, {
@@ -107,7 +109,7 @@ export async function fetchPfmProductOverviewRange(
   supabase,
   { clientId, from, to, limit = 50 }
 ) {
-  const pageLimit = Math.min(Math.max(limit * 3, 200), 500);
+  const pageLimit = PFM_PAGES_PER_CHUNK;
 
   const [dailyRaw, allDailyRaw, pagesRaw, channelsRaw, shapeRaw] =
     await Promise.all([

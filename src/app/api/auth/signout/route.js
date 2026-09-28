@@ -41,7 +41,7 @@ export async function GET(request) {
         user,
         eventType: 'logout',
         eventAction: reason === 'inactivity' ? 'inactivity_timeout' : 'sign_out_redirect',
-        pagePath: '/dashboard',
+        pagePath: '/',
         metadata: reason === 'inactivity' ? { reason: 'inactivity_timeout_45m' } : {},
       });
     }

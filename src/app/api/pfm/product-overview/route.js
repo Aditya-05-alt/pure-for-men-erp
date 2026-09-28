@@ -2,12 +2,12 @@ import { createClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
 import { mapPfmChannelRows } from '@/lib/pfm/channelLabel';
 import { fetchPfmProductOverviewRange } from '@/lib/api/pfmProductOverviewFetch';
-import {
-  enrichChannelsWithKeyEvents,
-  enrichProductsWithItemEcommerce,
-  fetchGa4ChannelKeyEvents,
-  fetchGa4ItemEcommerce,
-} from '@/lib/pfm/ga4ItemEcommerce';
+// import {
+//   enrichChannelsWithKeyEvents,
+//   enrichProductsWithItemEcommerce,
+//   fetchGa4ChannelKeyEvents,
+//   fetchGa4ItemEcommerce,
+// } from '@/lib/pfm/ga4ItemEcommerce';
 import { pctChange } from '@/lib/overview/comparePeriod';
 
 export const maxDuration = 120;
@@ -91,7 +91,7 @@ export async function GET(request) {
   const clientId = searchParams.get('clientId')?.trim() || DEFAULT_CLIENT_ID;
   const limit = Math.min(
     Math.max(Number(searchParams.get('limit')) || 50, 1),
-    500
+    10000
   );
 
   if (!from || !to || !priorFrom || !priorTo) {
@@ -137,28 +137,28 @@ export async function GET(request) {
   const dailyPrior = mapDaily(priBundle.daily);
   const allCurrent = mapDaily(curBundle.allDaily);
   const allPrior = mapDaily(priBundle.allDaily);
-  let productsCurrent = mapPages(curBundle.pages);
-  let productsPrior = mapPages(priBundle.pages);
+  const productsCurrent = mapPages(curBundle.pages);
+  const productsPrior = mapPages(priBundle.pages);
 
-  // Product page paths don't carry purchase key events in GA4 (those land on
-  // checkout/thank-you). Enrich Top Products from item-scoped ecommerce instead.
-  let itemEcommerceApplied = false;
-  let itemEcommerceError = null;
-  try {
-    const [itemCur, itemPri] = await Promise.all([
-      fetchGa4ItemEcommerce({ from, to }),
-      fetchGa4ItemEcommerce({ from: priorFrom, to: priorTo }),
-    ]);
-    productsCurrent = enrichProductsWithItemEcommerce(productsCurrent, itemCur);
-    productsPrior = enrichProductsWithItemEcommerce(productsPrior, itemPri);
-    itemEcommerceApplied = true;
-  } catch (err) {
-    itemEcommerceError = err?.message || String(err);
-    console.warn(
-      '[pfm/product-overview] item ecommerce enrich failed:',
-      itemEcommerceError
-    );
-  }
+  // Conversions disabled — GA4 item/key-event attribution doesn't reconcile yet,
+  // so conversions stay at the DB value (0 for product page paths).
+  const itemEcommerceApplied = false;
+  const itemEcommerceError = null;
+  // try {
+  //   const [itemCur, itemPri] = await Promise.all([
+  //     fetchGa4ItemEcommerce({ from, to }),
+  //     fetchGa4ItemEcommerce({ from: priorFrom, to: priorTo }),
+  //   ]);
+  //   productsCurrent = enrichProductsWithItemEcommerce(productsCurrent, itemCur);
+  //   productsPrior = enrichProductsWithItemEcommerce(productsPrior, itemPri);
+  //   itemEcommerceApplied = true;
+  // } catch (err) {
+  //   itemEcommerceError = err?.message || String(err);
+  //   console.warn(
+  //     '[pfm/product-overview] item ecommerce enrich failed:',
+  //     itemEcommerceError
+  //   );
+  // }
 
   const productCurTotal = sumViews(dailyCurrent);
   const productPriTotal = sumViews(dailyPrior);
@@ -166,27 +166,27 @@ export async function GET(request) {
   const pagePriTotal = sumViews(allPrior);
 
   // Always use raw GA4 session channels for product pages (no source-mapping / Unmapped).
-  let channelsCurrent = mapPfmChannelRows(curBundle.channels);
-  let channelsPrior = mapPfmChannelRows(priBundle.channels);
+  const channelsCurrent = mapPfmChannelRows(curBundle.channels);
+  const channelsPrior = mapPfmChannelRows(priBundle.channels);
 
-  // Page-path rows don't carry purchase key events — pull channel keyEvents from GA4.
-  let channelKeyEventsApplied = false;
-  let channelKeyEventsError = null;
-  try {
-    const [keCur, kePri] = await Promise.all([
-      fetchGa4ChannelKeyEvents({ from, to }),
-      fetchGa4ChannelKeyEvents({ from: priorFrom, to: priorTo }),
-    ]);
-    channelsCurrent = enrichChannelsWithKeyEvents(channelsCurrent, keCur);
-    channelsPrior = enrichChannelsWithKeyEvents(channelsPrior, kePri);
-    channelKeyEventsApplied = true;
-  } catch (err) {
-    channelKeyEventsError = err?.message || String(err);
-    console.warn(
-      '[pfm/product-overview] channel keyEvents enrich failed:',
-      channelKeyEventsError
-    );
-  }
+  // Channel key-event conversions disabled (see note above).
+  const channelKeyEventsApplied = false;
+  const channelKeyEventsError = null;
+  // try {
+  //   const [keCur, kePri] = await Promise.all([
+  //     fetchGa4ChannelKeyEvents({ from, to }),
+  //     fetchGa4ChannelKeyEvents({ from: priorFrom, to: priorTo }),
+  //   ]);
+  //   channelsCurrent = enrichChannelsWithKeyEvents(channelsCurrent, keCur);
+  //   channelsPrior = enrichChannelsWithKeyEvents(channelsPrior, kePri);
+  //   channelKeyEventsApplied = true;
+  // } catch (err) {
+  //   channelKeyEventsError = err?.message || String(err);
+  //   console.warn(
+  //     '[pfm/product-overview] channel keyEvents enrich failed:',
+  //     channelKeyEventsError
+  //   );
+  // }
 
   return NextResponse.json({
     clientId,

@@ -45,7 +45,7 @@ export async function POST(request) {
   }
 
   const pagePath = String(body.page_path || '').trim() || null;
-  if (pagePath.startsWith('/dashboard/admin')) {
+  if (pagePath?.startsWith('/dashboard/admin')) {
     return NextResponse.json({ ok: true, skipped: 'admin' });
   }
 

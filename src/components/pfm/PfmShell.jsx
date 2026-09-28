@@ -12,6 +12,7 @@ import { formatRangeLabel } from '@/lib/overview/comparePeriod';
 import AllPageViewsPanel from './AllPageViewsPanel';
 import ProductPageViewsPanel from './ProductPageViewsPanel';
 import PfmSourceMappingPanel from './PfmSourceMappingPanel';
+import LoginStsTracker from '@/components/telemetry/LoginStsTracker';
 
 const bebas = Bebas_Neue({
   weight: '400',
@@ -59,6 +60,7 @@ export default function PfmShell() {
 
   return (
     <div className={`vdp-root pfm-dash ${bebas.variable} ${dmSans.variable}`}>
+      <LoginStsTracker />
       <div className="pfm-dash-atmosphere" aria-hidden="true">
         <div className="pfm-dash-glow pfm-dash-glow--a" />
         <div className="pfm-dash-glow pfm-dash-glow--b" />

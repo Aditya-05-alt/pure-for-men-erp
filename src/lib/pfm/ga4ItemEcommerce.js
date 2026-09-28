@@ -242,19 +242,30 @@ export function enrichProductsWithItemEcommerce(products, itemMap) {
     }));
   }
 
-  return (products || []).map((p) => {
+  // Many URLs (locale, collection paths) map to one item — credit each item once,
+  // to its highest-view page, so totals aren't multiplied.
+  const ranked = (products || [])
+    .map((p, idx) => ({ p, idx }))
+    .sort((a, b) => (Number(b.p.views) || 0) - (Number(a.p.views) || 0));
+  const claimed = new Set();
+  const out = new Array(ranked.length);
+
+  for (const { p, idx } of ranked) {
     const titleKey = normalizeProductLabel(p.pageTitle);
     const handleKey = pathHandle(p.pagePath);
 
     const hit =
       findBestItemMatch(titleKey, itemMap) ||
       findBestItemMatch(handleKey, itemMap);
+    const first = hit && !claimed.has(hit.itemName);
+    if (first) claimed.add(hit.itemName);
 
-    return {
+    out[idx] = {
       ...p,
-      conversions: hit ? hit.conversions : 0,
-      revenue: hit ? hit.revenue : 0,
+      conversions: first ? hit.conversions : 0,
+      revenue: first ? hit.revenue : 0,
       itemNameMatched: hit?.itemName || null,
     };
-  });
+  }
+  return out;
 }

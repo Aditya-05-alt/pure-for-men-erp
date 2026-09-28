@@ -1,15 +1,13 @@
 'use client';
 
+import Link from 'next/link';
 import { useFormStatus } from 'react-dom';
-import { useActionState, useState, useCallback, useEffect } from 'react';
+import { useActionState, useState, useEffect } from 'react';
 import { useSearchParams } from 'next/navigation';
 import { signInAction } from '@/lib/auth/actions';
 import { INACTIVITY_TIMEOUT_MINUTES } from '@/lib/auth/inactivityTimeout';
-import {
-  PFM_LOGIN_EMAIL,
-  PFM_LOGIN_PASSWORD,
-} from '@/lib/auth/pfmHardcoded';
 import { resetDealerToAll } from '@/lib/dashboard/dashboardPrefs';
+import ClientContextFields from '@/components/auth/ClientContextFields';
 
 const initialState = { ok: false, error: null };
 
@@ -25,18 +23,13 @@ function SubmitButton() {
 export default function LoginForm() {
   const searchParams = useSearchParams();
   const sessionTimedOut = searchParams.get('timeout') === '1';
+  const confirmFailed = searchParams.get('confirm') === 'failed';
+  const redirectTo = searchParams.get('redirectTo') || '/';
   const [state, formAction] = useActionState(signInAction, initialState);
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
   const [showPw, setShowPw] = useState(false);
 
   useEffect(() => {
     resetDealerToAll();
-  }, []);
-
-  const fillDemo = useCallback(() => {
-    setEmail(PFM_LOGIN_EMAIL);
-    setPassword(PFM_LOGIN_PASSWORD);
   }, []);
 
   return (
@@ -68,6 +61,12 @@ export default function LoginForm() {
               inactivity. Please sign in again.
             </div>
           )}
+          {confirmFailed && (
+            <div className="pfm-login-alert" role="status">
+              That confirmation link is invalid or expired. Try signing in, or
+              sign up again to get a new link.
+            </div>
+          )}
 
           <form action={formAction} noValidate className="pfm-login-form">
             <div className="pfm-login-field">
@@ -79,8 +78,6 @@ export default function LoginForm() {
                 autoComplete="email"
                 required
                 placeholder="you@pureformen.com"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
               />
             </div>
 
@@ -94,8 +91,6 @@ export default function LoginForm() {
                   autoComplete="current-password"
                   required
                   placeholder="••••••••"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
                 />
                 <button
                   type="button"
@@ -108,7 +103,8 @@ export default function LoginForm() {
               </div>
             </div>
 
-            <input type="hidden" name="remember" value="on" />
+            <input type="hidden" name="redirectTo" value={redirectTo} />
+            <ClientContextFields />
 
             <div className="pfm-login-error" role="alert">
               {state?.error || ''}
@@ -117,15 +113,10 @@ export default function LoginForm() {
             <SubmitButton />
           </form>
 
-          <button type="button" className="pfm-login-hint" onClick={fillDemo}>
-            <span className="pfm-login-hint-label">Demo access</span>
-            <span className="pfm-login-hint-creds">
-              {PFM_LOGIN_EMAIL}
-              <span aria-hidden="true"> · </span>
-              {PFM_LOGIN_PASSWORD}
-            </span>
-            <span className="pfm-login-hint-cta">Click to fill</span>
-          </button>
+          <p className="pfm-login-switch">
+            Don&apos;t have an account?{' '}
+            <Link href="/signup">Create one</Link>
+          </p>
         </div>
 
         <footer className="pfm-login-foot">

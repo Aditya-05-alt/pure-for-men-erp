@@ -24,7 +24,15 @@ async function enforceDashboardReportAccess(supabase, user, response, request, p
   }
 }
 
+function supabaseConfigured() {
+  return Boolean(
+    process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY
+  );
+}
+
+/** Demo cookie only counts in hardcoded or no-Supabase demo mode. */
 function hasDemoSession(request) {
+  if (!HARDCODED_LOGIN_ENABLED && supabaseConfigured()) return false;
   return Boolean(request.cookies.get('sa_demo_session')?.value);
 }
 
@@ -58,13 +66,13 @@ async function hasSupabaseUser(request) {
  *   /              — Pure for Men app (hardcoded session or Supabase)
  *   /dashboard/*   — clone dashboard routes
  *   /reports/*     — reports
- *   /login         — public; bounce home if already signed in
+ *   /login, /signup — public; bounce home if already signed in
  */
 export async function middleware(request) {
   const { pathname } = request.nextUrl;
 
-  // Already signed in → skip login page
-  if (pathname === '/login') {
+  // Already signed in → skip login / signup pages
+  if (pathname === '/login' || pathname === '/signup') {
     if (hasDemoSession(request)) {
       return NextResponse.redirect(new URL('/', request.url));
     }
@@ -131,5 +139,5 @@ export async function middleware(request) {
 }
 
 export const config = {
-  matcher: ['/', '/login', '/dashboard/:path*', '/reports/:path*'],
+  matcher: ['/', '/login', '/signup', '/dashboard/:path*', '/reports/:path*'],
 };
