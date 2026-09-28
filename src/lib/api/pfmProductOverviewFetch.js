@@ -61,6 +61,18 @@ function mergeChannelRows(rows) {
   );
 }
 
+/** All-page channel breakdown, chunked by date so long ranges don't time out. */
+export async function fetchPfmChannelBreakdownRange(supabase, { clientId, from, to }) {
+  const rows = await fetchRange(
+    supabase,
+    'get_pfm_channel_breakdown',
+    clientId,
+    from,
+    to
+  );
+  return mergeChannelRows(rows);
+}
+
 function mergeTopProductRows(rows, limit) {
   const byPath = new Map();
   for (const r of rows || []) {

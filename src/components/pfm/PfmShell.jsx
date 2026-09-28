@@ -126,6 +126,8 @@ export default function PfmShell() {
             priorTo={period.priorTo}
             curLabel={period.curLabel}
             priLabel={period.priLabel}
+            compareMode={compareMode}
+            onCompareModeChange={handleCompareMode}
           />
         ) : (
           <PfmSourceMappingPanel

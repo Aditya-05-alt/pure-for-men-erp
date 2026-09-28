@@ -1,7 +1,9 @@
 import { createClient } from '@supabase/supabase-js';
 import { NextResponse } from 'next/server';
+import { fetchPfmChannelBreakdownRange } from '@/lib/api/pfmProductOverviewFetch';
+import { mapPfmChannelRows } from '@/lib/pfm/channelLabel';
 
-export const maxDuration = 60;
+export const maxDuration = 120;
 
 const DEFAULT_CLIENT_ID = '001';
 
@@ -14,6 +16,37 @@ function supabasePublic() {
   return createClient(url, key, {
     auth: { persistSession: false, autoRefreshToken: false },
   });
+}
+
+const POSTGREST_MAX_ROWS = 1000;
+const PAGE_FETCH_CONCURRENCY = 4;
+
+/** PostgREST caps each response at 1000 rows; page through with .range(). */
+async function rpcAllRows(supabase, rpcName, params, maxRows) {
+  if (maxRows <= POSTGREST_MAX_ROWS) {
+    return supabase.rpc(rpcName, params);
+  }
+  const out = [];
+  let offset = 0;
+  while (offset < maxRows) {
+    const batch = await Promise.all(
+      Array.from({ length: PAGE_FETCH_CONCURRENCY }, (_, i) => {
+        const start = offset + i * POSTGREST_MAX_ROWS;
+        if (start >= maxRows) return Promise.resolve({ data: [], error: null });
+        const end = Math.min(start + POSTGREST_MAX_ROWS, maxRows) - 1;
+        return supabase.rpc(rpcName, params).range(start, end);
+      })
+    );
+    let done = false;
+    for (const res of batch) {
+      if (res.error) return { data: null, error: res.error };
+      out.push(...(res.data || []));
+      if ((res.data || []).length < POSTGREST_MAX_ROWS) done = true;
+    }
+    if (done) break;
+    offset += PAGE_FETCH_CONCURRENCY * POSTGREST_MAX_ROWS;
+  }
+  return { data: out, error: null };
 }
 
 /**
@@ -33,7 +66,7 @@ export async function GET(request) {
       : 'all';
   const limit = Math.min(
     Math.max(Number(searchParams.get('limit')) || 50, 1),
-    200
+    20000
   );
 
   if (!from || !to || !priorFrom || !priorTo) {
@@ -58,6 +91,14 @@ export async function GET(request) {
   const pagesRpc =
     scope === 'product' ? 'get_pfm_top_product_pages' : 'get_pfm_top_pages';
 
+  const pagesRequest = (p_from, p_to) =>
+    rpcAllRows(
+      supabase,
+      pagesRpc,
+      { p_from, p_to, p_client_id: clientId, p_limit: limit },
+      limit
+    );
+
   const [dailyCur, dailyPri, pagesCur, pagesPri] = await Promise.all([
     supabase.rpc(dailyRpc, {
       p_from: from,
@@ -69,18 +110,8 @@ export async function GET(request) {
       p_to: priorTo,
       p_client_id: clientId,
     }),
-    supabase.rpc(pagesRpc, {
-      p_from: from,
-      p_to: to,
-      p_client_id: clientId,
-      p_limit: limit,
-    }),
-    supabase.rpc(pagesRpc, {
-      p_from: priorFrom,
-      p_to: priorTo,
-      p_client_id: clientId,
-      p_limit: limit,
-    }),
+    pagesRequest(from, to),
+    pagesRequest(priorFrom, priorTo),
   ]);
 
   const firstErr =
@@ -88,6 +119,45 @@ export async function GET(request) {
   if (firstErr) {
     console.error('[pfm/page-views]', firstErr.message);
     return NextResponse.json({ error: firstErr.message }, { status: 500 });
+  }
+
+  let pagesPriorByPath = [];
+  let channelsCurrent = [];
+  let channelsPrior = [];
+  if (scope === 'all') {
+    const curPaths = (pagesCur.data || []).map((r) => r.page_path || '(not set)');
+    // When every page was requested, the prior list is already complete.
+    const priorIsComplete = (pagesPri.data || []).length < limit;
+    try {
+      const [byPaths, chCur, chPri] = await Promise.all([
+        priorIsComplete
+          ? Promise.resolve({ data: pagesPri.data || [], error: null })
+          : curPaths.length
+          ? supabase.rpc('get_pfm_pages_by_paths', {
+              p_from: priorFrom,
+              p_to: priorTo,
+              p_client_id: clientId,
+              p_paths: curPaths,
+            })
+          : Promise.resolve({ data: [], error: null }),
+        fetchPfmChannelBreakdownRange(supabase, { clientId, from, to }),
+        fetchPfmChannelBreakdownRange(supabase, {
+          clientId,
+          from: priorFrom,
+          to: priorTo,
+        }),
+      ]);
+      if (byPaths.error) throw byPaths.error;
+      pagesPriorByPath = byPaths.data || [];
+      channelsCurrent = mapPfmChannelRows(chCur);
+      channelsPrior = mapPfmChannelRows(chPri);
+    } catch (err) {
+      console.error('[pfm/page-views] compare', err?.message || err);
+      return NextResponse.json(
+        { error: err?.message || 'Failed to load page comparison' },
+        { status: 500 }
+      );
+    }
   }
 
   const mapDaily = (rows) =>
@@ -105,6 +175,7 @@ export async function GET(request) {
       views: Number(r.views) || 0,
       sessions: Number(r.sessions) || 0,
       totalUsers: Number(r.total_users) || 0,
+      newUsers: Number(r.new_users) || 0,
     }));
 
   const dailyCurrent = mapDaily(dailyCur.data);
@@ -126,5 +197,8 @@ export async function GET(request) {
     dailyPrior,
     pagesCurrent: mapPages(pagesCur.data),
     pagesPrior: mapPages(pagesPri.data),
+    pagesPriorByPath: mapPages(pagesPriorByPath),
+    channelsCurrent,
+    channelsPrior,
   });
 }

@@ -1,6 +1,6 @@
 'use client';
 
-import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { fetchPfmProductOverview } from '@/lib/api/pfmProductOverview';
 import { enumerateDatesInclusive } from '@/lib/ga4/dateRange';
 import { colorForChannel } from '@/lib/ga4/channelDisplay';
@@ -13,7 +13,15 @@ import VdpChart from '@/components/vdp/VdpChart';
 import { Card, Kpi, Seg, Toolbar, ToolbarGroup } from '@/components/vdp/VdpUi';
 import { VdpLoadingCard } from '@/components/vdp/VdpLoadingBanner';
 import { useSoftLoadPercent } from '@/components/vdp/useSoftLoadPercent';
-import Delta from '@/components/dashboard/Delta';
+import { ChannelCompareTable, PageCompareTable } from '@/components/pfm/PfmCompareTables';
+
+const PRODUCT_METRIC_KEYS = [
+  'views',
+  // 'conversions',
+  'totalUsers',
+  'newUsers',
+  'returningUsers',
+];
 
 function formatShortDay(iso) {
   if (!iso) return '';
@@ -123,117 +131,6 @@ function ShapeLegend({ chart }) {
   );
 }
 
-const PFM_SITE_ORIGIN = 'https://pureformen.com';
-
-function productPageHref(pagePath) {
-  const path = String(pagePath || '').trim();
-  if (!path || path === '(not set)') return null;
-  if (/^https?:\/\//i.test(path)) return path;
-  return `${PFM_SITE_ORIGIN}${path.startsWith('/') ? path : `/${path}`}`;
-}
-
-function formatMoney(n) {
-  const v = Number(n) || 0;
-  return v.toLocaleString('en-US', {
-    style: 'currency',
-    currency: 'USD',
-    minimumFractionDigits: 2,
-    maximumFractionDigits: 2,
-  });
-}
-
-function TopProductsTable({ rows, scroll, labelMode = 'title' }) {
-  if (!rows?.length) {
-    return (
-      <div style={{ color: 'var(--vdp-muted)', fontSize: 13, padding: 12 }}>
-        No product page data for this period.
-      </div>
-    );
-  }
-  const showTitle = labelMode === 'title';
-  const totals = rows.reduce(
-    (acc, r) => {
-      acc.views += Number(r.views) || 0;
-      acc.conversions += Number(r.conversions) || 0;
-      acc.totalUsers += Number(r.totalUsers) || 0;
-      acc.newUsers += Number(r.newUsers) || 0;
-      return acc;
-    },
-    { views: 0, conversions: 0, totalUsers: 0, newUsers: 0 }
-  );
-  const table = (
-    <table className="vdp-table">
-      <thead>
-        <tr>
-          <th>{showTitle ? 'Page title' : 'URL'}</th>
-          <th className="right">Views</th>
-          {/* <th className="right">Conversions</th> */}
-          <th className="right">Total Users</th>
-          <th className="right">New Users</th>
-          <th className="right">Returning Users</th>
-          {/* <th className="right">Revenue</th> */}
-        </tr>
-      </thead>
-      <tbody>
-        {rows.map((r) => {
-          const href = productPageHref(r.pagePath);
-          const label = showTitle
-            ? String(r.pageTitle || '').trim() || r.pagePath
-            : r.pagePath;
-          return (
-            <tr key={r.pagePath}>
-              <td style={{ wordBreak: 'break-word', fontWeight: 500, lineHeight: 1.3 }}>
-                {href ? (
-                  <a
-                    href={href}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="vdp-product-url"
-                    title={showTitle ? `${label}\n${href}` : `Open ${href}`}
-                  >
-                    {label}
-                  </a>
-                ) : (
-                  label
-                )}
-              </td>
-              <td className="right mono">{fmt(r.views)}</td>
-              {/* <td className="right mono">{fmt(r.conversions)}</td> */}
-              <td className="right mono">{fmt(r.totalUsers)}</td>
-              <td className="right mono">{fmt(r.newUsers)}</td>
-              <td className="right mono">
-                {fmt(returningUsers(r.totalUsers, r.newUsers))}
-              </td>
-              {/* <td className="right mono">{formatMoney(r.revenue)}</td> */}
-            </tr>
-          );
-        })}
-      </tbody>
-      <tfoot>
-        <tr className="vdp-table-total-row">
-          <td>Total</td>
-          <td className="right mono">{fmt(totals.views)}</td>
-          {/* <td className="right mono">{fmt(totals.conversions)}</td> */}
-          <td className="right mono">{fmt(totals.totalUsers)}</td>
-          <td className="right mono">{fmt(totals.newUsers)}</td>
-          <td className="right mono">
-            {fmt(returningUsers(totals.totalUsers, totals.newUsers))}
-          </td>
-        </tr>
-      </tfoot>
-    </table>
-  );
-  return (
-    <div
-      className={`vdp-top-vehicles-scroll${
-        scroll ? '' : ' vdp-top-vehicles-scroll--fit'
-      }`}
-    >
-      {table}
-    </div>
-  );
-}
-
 function TopProductsLimitSelect({ value, onChange }) {
   return (
     <select
@@ -262,386 +159,6 @@ function TopProductsLabelSelect({ value, onChange }) {
   );
 }
 
-function returningUsers(totalUsers, newUsers) {
-  return Math.max((Number(totalUsers) || 0) - (Number(newUsers) || 0), 0);
-}
-
-function emptyChannelMetrics() {
-  return {
-    views: 0,
-    conversions: 0,
-    totalUsers: 0,
-    newUsers: 0,
-    returningUsers: 0,
-  };
-}
-
-function metricsFromChannelRow(r) {
-  const totalUsers = Number(r?.totalUsers) || 0;
-  const newUsers = Number(r?.newUsers) || 0;
-  return {
-    views: Number(r?.views) || 0,
-    conversions: Number(r?.conversions) || 0,
-    totalUsers,
-    newUsers,
-    returningUsers: returningUsers(totalUsers, newUsers),
-  };
-}
-
-function mergeChannelMetricComparison(curRows, priRows) {
-  const curMap = new Map();
-  const priMap = new Map();
-  for (const r of curRows || []) {
-    curMap.set(String(r.channel_bucket || '(not set)'), metricsFromChannelRow(r));
-  }
-  for (const r of priRows || []) {
-    priMap.set(String(r.channel_bucket || '(not set)'), metricsFromChannelRow(r));
-  }
-  const keys = new Set([...curMap.keys(), ...priMap.keys()]);
-  const rows = [...keys].map((ch) => {
-    const cur = curMap.get(ch) || emptyChannelMetrics();
-    const pri = priMap.get(ch) || emptyChannelMetrics();
-    return {
-      ch,
-      cur,
-      pri,
-      delta: {
-        views: pctChange(cur.views, pri.views),
-        conversions: pctChange(cur.conversions, pri.conversions),
-        totalUsers: pctChange(cur.totalUsers, pri.totalUsers),
-        newUsers: pctChange(cur.newUsers, pri.newUsers),
-        returningUsers: pctChange(cur.returningUsers, pri.returningUsers),
-      },
-    };
-  });
-  rows.sort(
-    (a, b) =>
-      b.cur.views - a.cur.views ||
-      b.pri.views - a.pri.views ||
-      a.ch.localeCompare(b.ch)
-  );
-
-  const totalsCur = emptyChannelMetrics();
-  const totalsPri = emptyChannelMetrics();
-  for (const r of rows) {
-    totalsCur.views += r.cur.views;
-    totalsCur.conversions += r.cur.conversions;
-    totalsCur.totalUsers += r.cur.totalUsers;
-    totalsCur.newUsers += r.cur.newUsers;
-    totalsCur.returningUsers += r.cur.returningUsers;
-    totalsPri.views += r.pri.views;
-    totalsPri.conversions += r.pri.conversions;
-    totalsPri.totalUsers += r.pri.totalUsers;
-    totalsPri.newUsers += r.pri.newUsers;
-    totalsPri.returningUsers += r.pri.returningUsers;
-  }
-
-  return {
-    rows,
-    totals: {
-      cur: totalsCur,
-      pri: totalsPri,
-      delta: {
-        views: pctChange(totalsCur.views, totalsPri.views),
-        conversions: pctChange(totalsCur.conversions, totalsPri.conversions),
-        totalUsers: pctChange(totalsCur.totalUsers, totalsPri.totalUsers),
-        newUsers: pctChange(totalsCur.newUsers, totalsPri.newUsers),
-        returningUsers: pctChange(
-          totalsCur.returningUsers,
-          totalsPri.returningUsers
-        ),
-      },
-    },
-  };
-}
-
-function MetricCompareCells({ cur, pri, delta }) {
-  return (
-    <>
-      <td className="col-cur mono">{fmt(cur)}</td>
-      <td className="col-prev mono">{fmt(pri)}</td>
-      <td className="col-mom">
-        <Delta value={delta} />
-      </td>
-    </>
-  );
-}
-
-function ProductChannelTable({
-  rows,
-  priRows,
-  curLabel,
-  priLabel,
-  compareActive,
-  comparePctLabel = 'MoM',
-  loading,
-}) {
-  const [copied, setCopied] = useState(false);
-
-  const comparison = useMemo(
-    () => mergeChannelMetricComparison(rows || [], priRows || []),
-    [rows, priRows]
-  );
-
-  const channelRows = useMemo(() => {
-    if (compareActive) {
-      return (comparison.rows || []).map((r, i) => ({
-        ...r,
-        color: colorForChannel(r.ch, i),
-      }));
-    }
-    return (rows || []).map((r, i) => ({
-      ch: r.channel_bucket || '(not set)',
-      cur: metricsFromChannelRow(r),
-      color: colorForChannel(r.channel_bucket || '(not set)', i),
-    }));
-  }, [compareActive, comparison.rows, rows]);
-
-  const totals = useMemo(() => {
-    if (compareActive) return comparison.totals;
-    const cur = channelRows.reduce(
-      (acc, r) => {
-        acc.views += r.cur.views;
-        acc.conversions += r.cur.conversions;
-        acc.totalUsers += r.cur.totalUsers;
-        acc.newUsers += r.cur.newUsers;
-        acc.returningUsers += r.cur.returningUsers;
-        return acc;
-      },
-      emptyChannelMetrics()
-    );
-    return { cur };
-  }, [compareActive, comparison.totals, channelRows]);
-
-  const metricKeys = [
-    'views',
-    // 'conversions',
-    'totalUsers',
-    'newUsers',
-    'returningUsers',
-  ];
-  const metricLabels = {
-    views: 'Views',
-    conversions: 'Conversions',
-    totalUsers: 'Total Users',
-    newUsers: 'New Users',
-    returningUsers: 'Returning Users',
-  };
-  const colCount = 1 + metricKeys.length * (compareActive ? 3 : 1);
-
-  const fmtDelta = (n) => `${n >= 0 ? '+' : ''}${n}%`;
-
-  const onCopy = useCallback(() => {
-    const lines = [];
-    if (compareActive) {
-      lines.push(
-        [
-          'Channel',
-          ...metricKeys.flatMap((k) => [
-            `${metricLabels[k]} ${curLabel}`,
-            `${metricLabels[k]} ${priLabel}`,
-            `${metricLabels[k]} ${comparePctLabel}`,
-          ]),
-        ].join('\t')
-      );
-      channelRows.forEach((r) => {
-        lines.push(
-          [
-            r.ch,
-            ...metricKeys.flatMap((k) => [
-              r.cur[k],
-              r.pri[k],
-              fmtDelta(r.delta[k]),
-            ]),
-          ].join('\t')
-        );
-      });
-      lines.push(
-        [
-          'Total',
-          ...metricKeys.flatMap((k) => [
-            totals.cur[k],
-            totals.pri[k],
-            fmtDelta(totals.delta[k]),
-          ]),
-        ].join('\t')
-      );
-    } else {
-      lines.push(
-        ['Channel', ...metricKeys.map((k) => metricLabels[k])].join('\t')
-      );
-      channelRows.forEach((r) => {
-        lines.push([r.ch, ...metricKeys.map((k) => r.cur[k])].join('\t'));
-      });
-      lines.push(
-        ['Total', ...metricKeys.map((k) => totals.cur[k])].join('\t')
-      );
-    }
-    navigator.clipboard
-      .writeText(lines.join('\n'))
-      .then(() => {
-        setCopied(true);
-        setTimeout(() => setCopied(false), 1800);
-      })
-      .catch(() => {});
-  }, [
-    channelRows,
-    totals,
-    compareActive,
-    curLabel,
-    priLabel,
-    comparePctLabel,
-  ]);
-
-  return (
-    <div className="vdp-card vdp-cmp-panel" style={{ marginTop: 16 }}>
-      <div className="vdp-cmp-head">
-        <div>
-          <h3>
-            Product Views by Channel
-            {compareActive ? ' — Period Comparison' : ''}
-          </h3>
-          <div className="vdp-cardsub" style={{ marginBottom: 0 }}>
-            {compareActive
-              ? `${curLabel} vs ${priLabel} · ${comparePctLabel} · all metrics`
-              : `${curLabel} · GA4 session channels`}
-          </div>
-        </div>
-        <div className="vdp-cmp-head-actions">
-          {compareActive ? (
-            <span className="vdp-cmp-badge">Copy-ready</span>
-          ) : null}
-          <button
-            type="button"
-            className={`vdp-cmp-copy ${copied ? 'copied' : ''}`}
-            onClick={onCopy}
-            disabled={loading}
-          >
-            {copied ? 'Copied!' : 'Copy table'}
-          </button>
-        </div>
-      </div>
-
-      <div className="cmp-table-wrap">
-        <table
-          className={`cmp-tbl cmp-tbl--channels${
-            compareActive ? ' cmp-tbl--period-compare cmp-tbl--multi-metric' : ''
-          }`}
-        >
-          <thead>
-            {compareActive ? (
-              <>
-                <tr>
-                  <th rowSpan={2}>Channel</th>
-                  {metricKeys.map((k) => (
-                    <th key={k} className="center" colSpan={3}>
-                      {metricLabels[k]}
-                    </th>
-                  ))}
-                </tr>
-                <tr>
-                  {metricKeys.map((k) => (
-                    <Fragment key={k}>
-                      <th className="col-cur">{curLabel}</th>
-                      <th className="col-prev">{priLabel}</th>
-                      <th className="col-mom">{comparePctLabel}</th>
-                    </Fragment>
-                  ))}
-                </tr>
-              </>
-            ) : (
-              <tr>
-                <th>Channel</th>
-                {metricKeys.map((k) => (
-                  <th key={k} className="right">
-                    {metricLabels[k]}
-                  </th>
-                ))}
-              </tr>
-            )}
-          </thead>
-          <tbody>
-            {loading && channelRows.length === 0 ? (
-              <tr>
-                <td colSpan={colCount} className="cmp-table-loading">
-                  Loading channel data…
-                </td>
-              </tr>
-            ) : channelRows.length === 0 ? (
-              <tr>
-                <td colSpan={colCount} className="cmp-table-loading">
-                  No product channel data for this period.
-                </td>
-              </tr>
-            ) : (
-              channelRows.map((r) => (
-                <tr key={r.ch}>
-                  <td>
-                    <div className="cmp-channel-cell">
-                      <div
-                        className="cmp-channel-dot"
-                        style={{ background: r.color }}
-                      />
-                      <span>{r.ch}</span>
-                    </div>
-                  </td>
-                  {compareActive ? (
-                    metricKeys.map((k) => (
-                      <MetricCompareCells
-                        key={k}
-                        cur={r.cur[k]}
-                        pri={r.pri[k]}
-                        delta={r.delta[k]}
-                      />
-                    ))
-                  ) : (
-                    metricKeys.map((k) => (
-                      <td key={k} className="right mono">
-                        {fmt(r.cur[k])}
-                      </td>
-                    ))
-                  )}
-                </tr>
-              ))
-            )}
-            {!loading && channelRows.length > 0 ? (
-              <tr className="cmp-tbl-total-row cmp-tbl-total-row--plain">
-                <td>Total</td>
-                {compareActive ? (
-                  metricKeys.map((k) => (
-                    <MetricCompareCells
-                      key={k}
-                      cur={totals.cur[k]}
-                      pri={totals.pri[k]}
-                      delta={totals.delta[k]}
-                    />
-                  ))
-                ) : (
-                  metricKeys.map((k) => (
-                    <td key={k} className="right mono">
-                      {fmt(totals.cur[k])}
-                    </td>
-                  ))
-                )}
-              </tr>
-            ) : null}
-          </tbody>
-        </table>
-      </div>
-      {compareActive ? (
-        <div className="vdp-cmp-foot">
-          <div className="vdp-cmp-legend">
-            <span className="leg-cur" /> {curLabel}
-            <span className="leg-prev" /> {priLabel}
-          </div>
-          <div className="vdp-cmp-note">
-            {comparePctLabel}: {curLabel} vs {priLabel}
-          </div>
-        </div>
-      ) : null}
-    </div>
-  );
-}
 
 export default function ProductPageViewsPanel({
   from,
@@ -884,10 +401,7 @@ export default function ProductPageViewsPanel({
   const allProducts = data?.productsCurrent || [];
   const displayProducts =
     topMode === 'all' ? allProducts : allProducts.slice(0, 5);
-  const displayProductsPri =
-    topMode === 'all'
-      ? data?.productsPrior || []
-      : (data?.productsPrior || []).slice(0, 5);
+  const tableCompare = compareActive && showCompare;
   const topTitle =
     topMode === 'all'
       ? 'All Products by Views'
@@ -982,31 +496,6 @@ export default function ProductPageViewsPanel({
             <VdpChart type="line" data={lineData} options={lineOptions} height={180} />
           </Card>
 
-          <div className="vdp-grid-2 vdp-grid-2--equal vdp-grid-2--overview">
-            <Card
-              title={topTitle}
-              sub={`${curLabel} · current`}
-              actions={topActions}
-            >
-              <TopProductsTable
-                rows={displayProducts}
-                scroll={topMode === 'all'}
-                labelMode={labelMode}
-              />
-            </Card>
-            <Card
-              title={topTitle}
-              sub={`${priLabel} · prior`}
-              actions={topActions}
-            >
-              <TopProductsTable
-                rows={displayProductsPri}
-                scroll={topMode === 'all'}
-                labelMode={labelMode}
-              />
-            </Card>
-          </div>
-
           {/* Source + Direct/Collection charts — hidden for now
           <Card
             className="vdp-card--chart"
@@ -1083,19 +572,6 @@ export default function ProductPageViewsPanel({
             <VdpChart type="line" data={lineData} options={lineOptions} height={180} />
           </Card>
 
-          <Card
-            title={topTitle}
-            sub="Current period · chipper_pfm_ga4_data"
-            actions={topActions}
-            style={{ marginBottom: 16 }}
-          >
-            <TopProductsTable
-              rows={displayProducts}
-              scroll={topMode === 'all'}
-              labelMode={labelMode}
-            />
-          </Card>
-
           {/* Source + Direct/Collection charts — hidden for now
           <div className="vdp-grid-2 vdp-grid-2--overview">
             <Card
@@ -1140,14 +616,38 @@ export default function ProductPageViewsPanel({
         </>
       )}
 
-      <ProductChannelTable
-        rows={data?.channelsCurrent || []}
-        priRows={data?.channelsPrior || []}
+      <PageCompareTable
+        title={`${topTitle}${tableCompare ? ' — Period Comparison' : ''}`}
+        sub={
+          tableCompare
+            ? `${curLabel} vs ${priLabel} · ${comparePctLabel} · compared by URL`
+            : `${curLabel} · product pages`
+        }
+        actions={topActions}
+        rows={displayProducts}
+        priRows={data?.productsPrior || []}
+        metricKeys={PRODUCT_METRIC_KEYS}
         curLabel={curLabel}
         priLabel={priLabel}
-        compareActive={compareActive && showCompare}
+        compareActive={tableCompare}
+        comparePctLabel={comparePctLabel}
+        labelMode={labelMode}
+        scroll={topMode === 'all'}
+        loading={loading}
+        emptyText="No product page data for this period."
+      />
+
+      <ChannelCompareTable
+        title="Product Views by Channel"
+        rows={data?.channelsCurrent || []}
+        priRows={data?.channelsPrior || []}
+        metricKeys={PRODUCT_METRIC_KEYS}
+        curLabel={curLabel}
+        priLabel={priLabel}
+        compareActive={tableCompare}
         comparePctLabel={comparePctLabel}
         loading={loading}
+        emptyText="No product channel data for this period."
       />
     </div>
   );

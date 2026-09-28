@@ -233,9 +233,26 @@
   background: var(--pfm-panel);
 }
 
+.vdp-root.pfm-dash .vdp-top-vehicles-scroll {
+  overflow-x: hidden;
+}
+
 .vdp-root.pfm-dash .vdp-top-vehicles-scroll--fit {
   max-height: none;
-  overflow: visible;
+  overflow-y: visible;
+}
+
+.vdp-root.pfm-dash .vdp-top-vehicles-scroll .vdp-table {
+  width: 100%;
+}
+
+/* URLs have no spaces — allow breaks anywhere so they wrap like page titles. */
+.vdp-root.pfm-dash .vdp-table td.vdp-product-cell {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  font-weight: 500;
+  line-height: 1.3;
 }
 
 .vdp-root.pfm-dash .vdp-table tfoot .vdp-table-total-row td {
@@ -356,6 +373,159 @@
 .vdp-root.pfm-dash .cmp-tbl--multi-metric td.col-mom {
   font-size: 12px;
   white-space: nowrap;
+}
+
+/* Sortable headers */
+.vdp-root.pfm-dash .cmp-tbl th.cmp-sort-th {
+  cursor: pointer;
+  user-select: none;
+}
+
+.vdp-root.pfm-dash .cmp-tbl th.cmp-sort-th:hover {
+  color: #e2e8f0 !important;
+}
+
+.vdp-root.pfm-dash .cmp-tbl th.cmp-sort-th.is-sorted {
+  color: #fff !important;
+}
+
+.vdp-root.pfm-dash .cmp-sort-ind {
+  display: inline-block;
+  margin-left: 4px;
+  font-size: 9px;
+  opacity: 0.35;
+}
+
+.vdp-root.pfm-dash .cmp-tbl th.cmp-sort-th:hover .cmp-sort-ind {
+  opacity: 0.7;
+}
+
+.vdp-root.pfm-dash .cmp-tbl th.cmp-sort-th.is-sorted .cmp-sort-ind {
+  opacity: 1;
+  color: var(--pfm-accent-hot);
+}
+
+.vdp-root.pfm-dash .cmp-tbl--multi-metric th.cmp-sort-th {
+  max-width: none;
+  text-overflow: clip;
+}
+
+/* URL-keyed compare table (Top pages / Top products) */
+.vdp-root.pfm-dash .cmp-tbl--pages th.right,
+.vdp-root.pfm-dash .cmp-tbl--pages td.right {
+  text-align: right;
+}
+
+.vdp-root.pfm-dash .cmp-tbl--pages td,
+.vdp-root.pfm-dash .cmp-tbl--pages th {
+  padding-left: 8px;
+  padding-right: 8px;
+}
+
+.vdp-root.pfm-dash .cmp-tbl--pages .cmp-rank-col {
+  width: 34px;
+  color: var(--pfm-muted) !important;
+  text-align: left !important;
+}
+
+.vdp-root.pfm-dash .cmp-tbl--pages .cmp-page-col,
+.vdp-root.pfm-dash .cmp-tbl--pages td.cmp-page-cell,
+.vdp-root.pfm-dash .cmp-tbl--pages tfoot td:nth-child(2) {
+  min-width: 200px;
+  text-align: left !important;
+}
+
+/* Total lives in <tfoot>, so the last body row must not get the base "total" styling. */
+.vdp-root.pfm-dash .cmp-tbl--pages tbody tr:last-child td,
+.vdp-root.pfm-dash .cmp-tbl--pages tbody tr:hover td {
+  background: transparent !important;
+  color: #e2e8f0 !important;
+  font-weight: inherit !important;
+  border-top: none;
+}
+
+.vdp-root.pfm-dash .cmp-tbl--pages tbody tr:last-child td.col-cur,
+.vdp-root.pfm-dash .cmp-tbl--pages tbody tr:hover td.col-cur {
+  background: rgba(59, 130, 246, 0.12) !important;
+}
+
+.vdp-root.pfm-dash .cmp-tbl--pages tbody tr:last-child td.col-prev,
+.vdp-root.pfm-dash .cmp-tbl--pages tbody tr:hover td.col-prev {
+  background: rgba(148, 163, 184, 0.08) !important;
+}
+
+.vdp-root.pfm-dash .cmp-tbl--pages tbody tr:last-child td.cmp-rank-col,
+.vdp-root.pfm-dash .cmp-tbl--pages tbody tr:hover td.cmp-rank-col {
+  color: var(--pfm-muted) !important;
+}
+
+/* URLs have no spaces — allow breaks anywhere so they wrap instead of scrolling. */
+.vdp-root.pfm-dash .cmp-tbl--pages td.cmp-page-cell {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  word-break: break-word;
+  font-weight: 500;
+  line-height: 1.3;
+  min-width: 200px;
+}
+
+.vdp-root.pfm-dash .cmp-page-path {
+  margin-top: 2px;
+  font-size: 11px;
+  font-weight: 400;
+  color: var(--pfm-muted);
+}
+
+.vdp-root.pfm-dash .cmp-table-wrap--scroll {
+  max-height: 560px;
+  overflow-y: auto;
+}
+
+.vdp-root.pfm-dash .cmp-table-wrap--scroll thead {
+  position: sticky;
+  top: 0;
+  z-index: 2;
+}
+
+.vdp-root.pfm-dash .cmp-table-wrap--scroll thead .col-cur {
+  background:
+    linear-gradient(rgba(59, 130, 246, 0.18), rgba(59, 130, 246, 0.18)),
+    var(--pfm-panel) !important;
+}
+
+.vdp-root.pfm-dash .cmp-table-wrap--scroll thead .col-prev {
+  background:
+    linear-gradient(rgba(148, 163, 184, 0.12), rgba(148, 163, 184, 0.12)),
+    var(--pfm-panel) !important;
+}
+
+.vdp-root.pfm-dash .cmp-tbl--pages tfoot {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
+}
+
+.vdp-root.pfm-dash .cmp-tbl--pages tfoot .cmp-tbl-total-row--plain td {
+  background: var(--pfm-panel) !important;
+}
+
+.vdp-root.pfm-dash .cmp-tbl--pages tfoot .cmp-tbl-total-row--plain td.col-cur {
+  background:
+    linear-gradient(rgba(59, 130, 246, 0.12), rgba(59, 130, 246, 0.12)),
+    var(--pfm-panel) !important;
+}
+
+.vdp-root.pfm-dash .cmp-tbl--pages tfoot .cmp-tbl-total-row--plain td.col-prev {
+  background:
+    linear-gradient(rgba(148, 163, 184, 0.08), rgba(148, 163, 184, 0.08)),
+    var(--pfm-panel) !important;
+}
+
+.vdp-root.pfm-dash .vdp-cmp-head-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
 }
 
 .vdp-root.pfm-dash .cmp-table-loading {
