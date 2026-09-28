@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { fetchPfmPageViews } from '@/lib/api/pfmPageViews';
 import { enumerateDatesInclusive } from '@/lib/ga4/dateRange';
 import { formatRangeLabel, pctChange } from '@/lib/overview/comparePeriod';
@@ -78,15 +78,17 @@ export default function AllPageViewsPanel({
 }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [overlayBusy, setOverlayBusy] = useState(false);
   const [error, setError] = useState(null);
   const [limit, setLimit] = useState(5);
   const [labelMode, setLabelMode] = useState('title');
+  const [appliedCompare, setAppliedCompare] = useState(false);
   const cancelRef = useRef(false);
   const genRef = useRef(0);
 
   const compareActive = compareMode === 'mom' || compareMode === 'pop';
   const showCompare = Boolean(priorFrom && priorTo);
-  const tableCompare = compareActive && showCompare;
+  const tableCompare = appliedCompare;
   const curShort = shortMonthLabel(from, to);
   const priShort = shortMonthLabel(priorFrom, priorTo);
   const comparePctLabel = compareMode === 'pop' ? 'PoP' : 'MoM';
@@ -97,15 +99,25 @@ export default function AllPageViewsPanel({
         ? 'MoM · full last month'
         : 'Compare';
 
+  // Show the loader before MoM/PoP layout work paints (avoids a frozen blank UI).
+  useLayoutEffect(() => {
+    setOverlayBusy(true);
+    setLoading(true);
+  }, [compareMode, from, to, priorFrom, priorTo, limit]);
+
   const load = useCallback(async () => {
     if (!from || !to || !priorFrom || !priorTo) {
       setData(null);
+      setLoading(false);
+      setOverlayBusy(false);
+      setAppliedCompare(false);
       return;
     }
     const gen = genRef.current + 1;
     genRef.current = gen;
     cancelRef.current = false;
     setLoading(true);
+    setOverlayBusy(true);
     setError(null);
 
     try {
@@ -123,9 +135,15 @@ export default function AllPageViewsPanel({
       setError(err?.message || 'Failed to load page views.');
       setData(null);
     } finally {
-      if (!cancelRef.current && genRef.current === gen) setLoading(false);
+      if (!cancelRef.current && genRef.current === gen) {
+        setLoading(false);
+        requestAnimationFrame(() => {
+          setAppliedCompare(compareActive && showCompare);
+          setOverlayBusy(false);
+        });
+      }
     }
-  }, [from, to, priorFrom, priorTo, limit]);
+  }, [from, to, priorFrom, priorTo, limit, compareMode, compareActive, showCompare]);
 
   useEffect(() => {
     load();
@@ -134,7 +152,8 @@ export default function AllPageViewsPanel({
     };
   }, [load]);
 
-  const loadPercent = useSoftLoadPercent(loading);
+  const busy = loading || overlayBusy;
+  const loadPercent = useSoftLoadPercent(busy);
 
   const curDates = useMemo(
     () => (from && to ? enumerateDatesInclusive(from, to) : []),
@@ -232,8 +251,17 @@ export default function AllPageViewsPanel({
   );
 
   return (
-    <div className={`vdp-view${loading ? ' vdp-view--card-loading' : ''}`}>
-      <VdpLoadingCard active={loading} percent={loadPercent} />
+    <div className={`vdp-view${busy ? ' vdp-view--card-loading' : ''}`}>
+      <VdpLoadingCard
+        active={busy}
+        percent={loadPercent}
+        freeze
+        label={
+          compareActive || compareMode
+            ? 'Updating comparison…'
+            : 'Loading...'
+        }
+      />
 
       <Toolbar>
         <ToolbarGroup label="Compare">

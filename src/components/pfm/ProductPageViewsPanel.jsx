@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import {
   fetchPfmProductChannelMatrix,
   fetchPfmProductOverview,
@@ -167,18 +167,107 @@ function TopProductsLabelSelect({ value, onChange }) {
   );
 }
 
-function MatrixChannelSelect({ value, onChange }) {
+function MatrixChannelMultiSelect({ options, value, onChange }) {
+  const [open, setOpen] = useState(false);
+  const rootRef = useRef(null);
+  const selected = Array.isArray(value) ? value : [];
+  const selectedSet = useMemo(() => new Set(selected), [selected]);
+
+  useEffect(() => {
+    if (!open) return undefined;
+    const onDoc = (e) => {
+      if (!rootRef.current?.contains(e.target)) setOpen(false);
+    };
+    const onKey = (e) => {
+      if (e.key === 'Escape') setOpen(false);
+    };
+    document.addEventListener('mousedown', onDoc);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', onDoc);
+      document.removeEventListener('keydown', onKey);
+    };
+  }, [open]);
+
+  const toggle = (channel) => {
+    if (selectedSet.has(channel)) {
+      onChange(selected.filter((c) => c !== channel));
+    } else {
+      onChange([...selected, channel]);
+    }
+  };
+
+  const top3 = options.slice(0, 3).map((o) => o.channel);
+  const all = options.map((o) => o.channel);
+  const triggerLabel = !options.length
+    ? 'No channels'
+    : selected.length === 0
+      ? 'Select channels'
+      : selected.length === options.length
+        ? `All channels (${selected.length})`
+        : selected.length <= 2
+          ? selected.join(', ')
+          : `${selected.length} channels selected`;
+
   return (
-    <select
-      className="vdp-top-vehicles-select"
-      value={value}
-      onChange={(e) => onChange(e.target.value)}
-      aria-label="Channels shown"
-    >
-      <option value="3">Top 3 channels</option>
-      <option value="5">Top 5 channels</option>
-      <option value="all">All channels</option>
-    </select>
+    <div className="pfm-channel-multi" ref={rootRef}>
+      <button
+        type="button"
+        className={`pfm-channel-multi-trigger${open ? ' is-open' : ''}`}
+        aria-haspopup="listbox"
+        aria-expanded={open}
+        aria-label="Channels shown"
+        onClick={() => setOpen((o) => !o)}
+      >
+        <span className="pfm-channel-multi-text">{triggerLabel}</span>
+        <span className="pfm-channel-multi-arr" aria-hidden>
+          {open ? '▴' : '▾'}
+        </span>
+      </button>
+      {open ? (
+        <div
+          className="pfm-channel-multi-pop"
+          role="listbox"
+          aria-label="Channels"
+          aria-multiselectable="true"
+        >
+          <div className="pfm-channel-multi-actions">
+            <button type="button" onClick={() => onChange(top3)}>
+              Top 3
+            </button>
+            <button type="button" onClick={() => onChange(all)}>
+              Select all
+            </button>
+            <button type="button" onClick={() => onChange([])}>
+              Clear
+            </button>
+            <span className="pfm-channel-multi-count">
+              {selected.length} selected
+            </span>
+          </div>
+          <ul className="pfm-channel-multi-list">
+            {options.map((o) => {
+              const checked = selectedSet.has(o.channel);
+              return (
+                <li key={o.channel}>
+                  <label className="pfm-channel-multi-item">
+                    <input
+                      type="checkbox"
+                      checked={checked}
+                      onChange={() => toggle(o.channel)}
+                    />
+                    <span className="pfm-channel-multi-name">{o.channel}</span>
+                    <span className="pfm-channel-multi-views mono">
+                      {fmt(o.views)}
+                    </span>
+                  </label>
+                </li>
+              );
+            })}
+          </ul>
+        </div>
+      ) : null}
+    </div>
   );
 }
 
@@ -195,16 +284,20 @@ export default function ProductPageViewsPanel({
 }) {
   const [data, setData] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [overlayBusy, setOverlayBusy] = useState(false);
   const [error, setError] = useState(null);
   const [topMode, setTopMode] = useState('5');
   const [labelMode, setLabelMode] = useState('title');
   const [matrix, setMatrix] = useState(null);
   const [matrixLoading, setMatrixLoading] = useState(false);
   const [matrixError, setMatrixError] = useState(null);
-  const [matrixChannels, setMatrixChannels] = useState('3');
+  const [matrixChannels, setMatrixChannels] = useState([]);
   const [matrixLabelMode, setMatrixLabelMode] = useState('title');
+  const [appliedCompare, setAppliedCompare] = useState(false);
+  const matrixDefaultKeyRef = useRef('');
   const cancelRef = useRef(false);
   const genRef = useRef(0);
+  const matrixGenRef = useRef(0);
 
   const compareActive = compareMode === 'mom' || compareMode === 'pop';
   const showCompare = Boolean(priorFrom && priorTo);
@@ -216,15 +309,24 @@ export default function ProductPageViewsPanel({
         ? 'MoM · full last month'
         : 'Compare';
 
+  // Show the loader before MoM/PoP layout work paints (avoids a frozen blank UI).
+  useLayoutEffect(() => {
+    setOverlayBusy(true);
+    setLoading(true);
+    setMatrixLoading(true);
+  }, [compareMode, from, to, priorFrom, priorTo]);
+
   const load = useCallback(async () => {
     if (!from || !to || !priorFrom || !priorTo) {
       setData(null);
+      setLoading(false);
       return;
     }
     const gen = genRef.current + 1;
     genRef.current = gen;
     cancelRef.current = false;
     setLoading(true);
+    setOverlayBusy(true);
     setError(null);
 
     try {
@@ -244,7 +346,7 @@ export default function ProductPageViewsPanel({
     } finally {
       if (!cancelRef.current && genRef.current === gen) setLoading(false);
     }
-  }, [from, to, priorFrom, priorTo]);
+  }, [from, to, priorFrom, priorTo, compareMode]);
 
   useEffect(() => {
     load();
@@ -256,10 +358,14 @@ export default function ProductPageViewsPanel({
   useEffect(() => {
     if (!from || !to) {
       setMatrix(null);
+      setMatrixLoading(false);
       return undefined;
     }
+    const gen = matrixGenRef.current + 1;
+    matrixGenRef.current = gen;
     const ctrl = new AbortController();
     setMatrixLoading(true);
+    setOverlayBusy(true);
     setMatrixError(null);
     fetchPfmProductChannelMatrix({
       from,
@@ -268,21 +374,60 @@ export default function ProductPageViewsPanel({
       priorTo,
       signal: ctrl.signal,
     })
-      .then((json) =>
-        setMatrix({ rows: json?.rows || [], rowsPrior: json?.rowsPrior || [] })
-      )
+      .then((json) => {
+        if (matrixGenRef.current !== gen) return;
+        setMatrix({ rows: json?.rows || [], rowsPrior: json?.rowsPrior || [] });
+      })
       .catch((err) => {
         if (err?.name === 'AbortError') return;
+        if (matrixGenRef.current !== gen) return;
         setMatrixError(err?.message || 'Failed to load product vs channel data.');
         setMatrix(null);
       })
       .finally(() => {
-        if (!ctrl.signal.aborted) setMatrixLoading(false);
+        if (!ctrl.signal.aborted && matrixGenRef.current === gen) {
+          setMatrixLoading(false);
+        }
       });
     return () => ctrl.abort();
-  }, [from, to, priorFrom, priorTo]);
+  }, [from, to, priorFrom, priorTo, compareMode]);
 
-  const loadPercent = useSoftLoadPercent(loading);
+  // Apply compare layout only after both fetches finish and the loader has painted.
+  useEffect(() => {
+    if (loading || matrixLoading) return undefined;
+    const id = requestAnimationFrame(() => {
+      setAppliedCompare(compareActive && showCompare);
+      setOverlayBusy(false);
+    });
+    return () => cancelAnimationFrame(id);
+  }, [loading, matrixLoading, compareActive, showCompare, data, matrix]);
+
+  const matrixChannelOptions = useMemo(() => {
+    const views = new Map();
+    for (const r of matrix?.rows || []) {
+      const ch = r.channel || '(not set)';
+      views.set(ch, (views.get(ch) || 0) + (Number(r.views) || 0));
+    }
+    return [...views.entries()]
+      .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+      .map(([channel, channelViews]) => ({ channel, views: channelViews }));
+  }, [matrix]);
+
+  // Default to top 3 channels by views whenever the period (or channel set) changes.
+  useEffect(() => {
+    if (!matrixChannelOptions.length) {
+      setMatrixChannels([]);
+      matrixDefaultKeyRef.current = '';
+      return;
+    }
+    const key = `${from}|${to}|${matrixChannelOptions.map((o) => o.channel).join('\u0001')}`;
+    if (matrixDefaultKeyRef.current === key) return;
+    matrixDefaultKeyRef.current = key;
+    setMatrixChannels(matrixChannelOptions.slice(0, 3).map((o) => o.channel));
+  }, [from, to, matrixChannelOptions]);
+
+  const busy = loading || matrixLoading || overlayBusy;
+  const loadPercent = useSoftLoadPercent(busy);
 
   const productCur = data?.totals?.productCurrent || 0;
   const productPri = data?.totals?.productPrior || 0;
@@ -458,7 +603,7 @@ export default function ProductPageViewsPanel({
   const allProducts = data?.productsCurrent || [];
   const displayProducts =
     topMode === 'all' ? allProducts : allProducts.slice(0, 5);
-  const tableCompare = compareActive && showCompare;
+  const tableCompare = appliedCompare;
   const curShort = shortMonthLabel(from, to);
   const priShort = shortMonthLabel(priorFrom, priorTo);
   const topTitle =
@@ -473,8 +618,17 @@ export default function ProductPageViewsPanel({
   );
 
   return (
-    <div className={`vdp-view${loading ? ' vdp-view--card-loading' : ''}`}>
-      <VdpLoadingCard active={loading} percent={loadPercent} />
+    <div className={`vdp-view${busy ? ' vdp-view--card-loading' : ''}`}>
+      <VdpLoadingCard
+        active={busy}
+        percent={loadPercent}
+        freeze
+        label={
+          compareActive || compareMode
+            ? 'Updating comparison…'
+            : 'Loading...'
+        }
+      />
 
       <Toolbar>
         <ToolbarGroup label="Compare">
@@ -720,7 +874,8 @@ export default function ProductPageViewsPanel({
               value={matrixLabelMode}
               onChange={setMatrixLabelMode}
             />
-            <MatrixChannelSelect
+            <MatrixChannelMultiSelect
+              options={matrixChannelOptions}
               value={matrixChannels}
               onChange={setMatrixChannels}
             />
@@ -735,7 +890,7 @@ export default function ProductPageViewsPanel({
         priShort={priShort}
         comparePctLabel={comparePctLabel}
         productLimit="all"
-        channelLimit={matrixChannels === 'all' ? 'all' : Number(matrixChannels)}
+        selectedChannels={matrixChannels}
         labelMode={matrixLabelMode}
         loading={matrixLoading}
       />

@@ -463,8 +463,7 @@ const OTHER_CHANNELS = 'Other';
 
 /**
  * Product rows x channel column groups; each group has Views / New / Total /
- * Returning users. Channels beyond `channelLimit` roll into "Other" so each
- * row still sums to the product's total.
+ * Returning users. Channels not in `selectedChannels` roll into "Other".
  */
 export function ProductChannelMatrixTable({
   title,
@@ -479,6 +478,8 @@ export function ProductChannelMatrixTable({
   priShort,
   comparePctLabel = 'MoM',
   productLimit = 5,
+  /** Channel labels to show as groups (views-ranked order preferred). */
+  selectedChannels = null,
   channelLimit = 3,
   labelMode = 'title',
   loading,
@@ -493,7 +494,14 @@ export function ProductChannelMatrixTable({
     const channels = [...channelViews.entries()]
       .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
       .map(([ch]) => ch);
-    const shown = channelLimit === 'all' ? channels : channels.slice(0, channelLimit);
+    const selectedList = Array.isArray(selectedChannels) ? selectedChannels : null;
+    const selectedSet = new Set((selectedList || []).filter(Boolean));
+    const shown =
+      selectedList === null
+        ? channelLimit === 'all'
+          ? channels
+          : channels.slice(0, Number(channelLimit) || 3)
+        : channels.filter((ch) => selectedSet.has(ch));
     const hasOther = shown.length < channels.length;
     const groupNames = hasOther ? [...shown, OTHER_CHANNELS] : shown;
     const groupIndex = new Map(shown.map((ch, i) => [ch, i]));
@@ -559,7 +567,7 @@ export function ProductChannelMatrixTable({
         return row;
       }),
     };
-  }, [rows, priRows, compareActive, productLimit, channelLimit]);
+  }, [rows, priRows, compareActive, productLimit, channelLimit, selectedChannels]);
 
   const totals = useMemo(() => {
     const out = {};

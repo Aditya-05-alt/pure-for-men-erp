@@ -774,6 +774,135 @@
     var(--pfm-panel) !important;
 }
 
+/* Product vs Channel — channel multi-select */
+.vdp-root.pfm-dash .pfm-channel-multi {
+  position: relative;
+  min-width: 200px;
+  max-width: 280px;
+}
+
+.vdp-root.pfm-dash .pfm-channel-multi-trigger {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  min-height: 32px;
+  box-sizing: border-box;
+  padding: 0 10px;
+  border-radius: 8px;
+  border: 1px solid var(--pfm-line-strong);
+  background: var(--pfm-panel-2);
+  color: #e2e8f0;
+  font-size: 12.5px;
+  font-weight: 500;
+  cursor: pointer;
+  text-align: left;
+}
+
+.vdp-root.pfm-dash .pfm-channel-multi-trigger:hover,
+.vdp-root.pfm-dash .pfm-channel-multi-trigger.is-open {
+  border-color: rgba(96, 165, 250, 0.55);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.14);
+}
+
+.vdp-root.pfm-dash .pfm-channel-multi-text {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.vdp-root.pfm-dash .pfm-channel-multi-arr {
+  color: var(--pfm-muted);
+  font-size: 11px;
+}
+
+.vdp-root.pfm-dash .pfm-channel-multi-pop {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  z-index: 40;
+  width: min(320px, 78vw);
+  max-height: 340px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  border-radius: 10px;
+  border: 1px solid var(--pfm-line-strong);
+  background: rgba(22, 24, 29, 0.98);
+  box-shadow: 0 18px 40px rgba(0, 0, 0, 0.45);
+}
+
+.vdp-root.pfm-dash .pfm-channel-multi-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  padding: 8px 10px;
+  border-bottom: 1px solid var(--pfm-line);
+}
+
+.vdp-root.pfm-dash .pfm-channel-multi-actions button {
+  background: transparent;
+  border: none;
+  color: var(--pfm-accent-hot);
+  font-size: 11.5px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 0;
+}
+
+.vdp-root.pfm-dash .pfm-channel-multi-actions button:hover {
+  color: #93c5fd;
+  text-decoration: underline;
+}
+
+.vdp-root.pfm-dash .pfm-channel-multi-count {
+  margin-left: auto;
+  font-size: 11px;
+  color: var(--pfm-muted);
+}
+
+.vdp-root.pfm-dash .pfm-channel-multi-list {
+  list-style: none;
+  margin: 0;
+  padding: 4px 0 8px;
+  overflow-y: auto;
+  max-height: 280px;
+  scrollbar-width: thin;
+  scrollbar-color: rgba(148, 163, 184, 0.45) rgba(10, 11, 13, 0.55);
+}
+
+.vdp-root.pfm-dash .pfm-channel-multi-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 7px 12px;
+  cursor: pointer;
+  color: #e2e8f0;
+  font-size: 12.5px;
+}
+
+.vdp-root.pfm-dash .pfm-channel-multi-item:hover {
+  background: rgba(59, 130, 246, 0.1);
+}
+
+.vdp-root.pfm-dash .pfm-channel-multi-item input {
+  accent-color: var(--pfm-accent);
+}
+
+.vdp-root.pfm-dash .pfm-channel-multi-name {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.vdp-root.pfm-dash .pfm-channel-multi-views {
+  color: var(--pfm-muted);
+  font-size: 11px;
+}
+
 .vdp-root.pfm-dash .vdp-cmp-head-actions {
   display: flex;
   align-items: center;
@@ -852,15 +981,33 @@
   background: rgba(10, 11, 13, 0.55);
 }
 
-.vdp-root.pfm-dash .vdp-load-card-overlay--freeze {
-  background: rgba(10, 11, 13, 0.72);
+.vdp-root.pfm-dash .vdp-load-card-overlay--freeze,
+body:has(.pfm-dash) .vdp-load-card-overlay--freeze {
+  background: rgba(10, 11, 13, 0.88);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
 }
 
-.vdp-root.pfm-dash .vdp-load-card {
+body:has(.pfm-dash) .vdp-load-card-overlay--top {
+  padding-top: max(96px, env(safe-area-inset-top, 0px) + 80px);
+}
+
+.vdp-root.pfm-dash .vdp-load-card,
+body:has(.pfm-dash) .vdp-load-card-overlay--freeze .vdp-load-card {
   background: rgba(22, 24, 29, 0.96);
   border: 1px solid rgba(241, 245, 249, 0.14);
   color: #f1f5f9;
   box-shadow: 0 20px 50px rgba(0, 0, 0, 0.45);
+}
+
+body:has(.pfm-dash) .vdp-load-card-overlay--freeze .vdp-load-card-label,
+body:has(.pfm-dash) .vdp-load-card-overlay--freeze .vdp-load-card-pct {
+  color: #60a5fa;
+}
+
+body:has(.pfm-dash) .vdp-load-card-overlay--freeze .vdp-load-card-spinner {
+  border-color: rgba(96, 165, 250, 0.35);
+  border-top-color: #60a5fa;
 }
 
 .vdp-root.pfm-dash .vdp-load-banner {

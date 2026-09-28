@@ -1898,11 +1898,33 @@ a.vdp-pill--logout:hover {
 .vdp-load-card-overlay--freeze {
   position: fixed;
   inset: 0;
-  z-index: 200;
+  z-index: 9999;
+  display: flex;
   align-items: center;
+  justify-content: center;
   padding-top: 0;
-  background: rgba(255, 255, 255, 0.78);
-  backdrop-filter: blur(2px);
+  width: 100vw;
+  height: 100vh;
+  height: 100dvh;
+  max-width: 100vw;
+  max-height: 100dvh;
+  background: rgba(255, 255, 255, 0.92);
+  backdrop-filter: blur(6px);
+  -webkit-backdrop-filter: blur(6px);
+  pointer-events: all;
+  overscroll-behavior: none;
+  touch-action: none;
+}
+/* Pin the card near the top of the viewport (always in view, no scrolling). */
+.vdp-load-card-overlay--top {
+  align-items: flex-start;
+  justify-content: center;
+  padding-top: max(72px, env(safe-area-inset-top, 0px) + 56px);
+}
+body.vdp-load-freeze-active {
+  overflow: hidden !important;
+  overscroll-behavior: none;
+  touch-action: none;
 }
 .vdp-load-card {
   width: 128px;
