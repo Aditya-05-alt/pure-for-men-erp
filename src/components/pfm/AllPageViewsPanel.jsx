@@ -9,7 +9,11 @@ import VdpChart from '@/components/vdp/VdpChart';
 import { Card, Kpi, Seg, Toolbar, ToolbarGroup } from '@/components/vdp/VdpUi';
 import { VdpLoadingCard } from '@/components/vdp/VdpLoadingBanner';
 import { useSoftLoadPercent } from '@/components/vdp/useSoftLoadPercent';
-import { ChannelCompareTable, PageCompareTable } from '@/components/pfm/PfmCompareTables';
+import {
+  ChannelCompareTable,
+  PageCompareTable,
+  shortMonthLabel,
+} from '@/components/pfm/PfmCompareTables';
 
 const PAGE_METRIC_KEYS = [
   'views',
@@ -83,6 +87,8 @@ export default function AllPageViewsPanel({
   const compareActive = compareMode === 'mom' || compareMode === 'pop';
   const showCompare = Boolean(priorFrom && priorTo);
   const tableCompare = compareActive && showCompare;
+  const curShort = shortMonthLabel(from, to);
+  const priShort = shortMonthLabel(priorFrom, priorTo);
   const comparePctLabel = compareMode === 'pop' ? 'PoP' : 'MoM';
   const compareModeLabel =
     compareMode === 'pop'
@@ -312,6 +318,8 @@ export default function AllPageViewsPanel({
         metricKeys={PAGE_METRIC_KEYS}
         curLabel={curLabel}
         priLabel={priLabel}
+        curShort={curShort}
+        priShort={priShort}
         compareActive={tableCompare}
         comparePctLabel={comparePctLabel}
         labelMode={labelMode}
@@ -327,6 +335,8 @@ export default function AllPageViewsPanel({
         metricKeys={CHANNEL_METRIC_KEYS}
         curLabel={curLabel}
         priLabel={priLabel}
+        curShort={curShort}
+        priShort={priShort}
         compareActive={tableCompare}
         comparePctLabel={comparePctLabel}
         loading={loading}

@@ -1,4 +1,8 @@
-import { rpcByDateChunks } from '@/lib/api/chunkedRpc';
+import { isStatementTimeoutError, rpcByDateChunks } from '@/lib/api/chunkedRpc';
+import {
+  chunkDateRangesInclusive,
+  enumerateDatesInclusive,
+} from '@/lib/ga4/dateRange';
 
 /** Days per RPC window — keeps product-page scans under statement_timeout. */
 export const PFM_OVERVIEW_CHUNK_DAYS = 14;
@@ -71,6 +75,89 @@ export async function fetchPfmChannelBreakdownRange(supabase, { clientId, from, 
     to
   );
   return mergeChannelRows(rows);
+}
+
+const POSTGREST_MAX_ROWS = 1000;
+
+/** One date window, paged past the PostgREST 1000-row response cap. */
+async function fetchAllRowsForWindow(supabase, rpcName, params) {
+  const out = [];
+  for (let start = 0; ; start += POSTGREST_MAX_ROWS) {
+    const { data, error } = await supabase
+      .rpc(rpcName, params)
+      .range(start, start + POSTGREST_MAX_ROWS - 1);
+    if (error) throw error;
+    out.push(...(data || []));
+    if ((data || []).length < POSTGREST_MAX_ROWS) return out;
+  }
+}
+
+/** On statement timeout, bisect the date window and retry. */
+async function fetchWindowResilient(supabase, rpcName, clientId, range) {
+  try {
+    return await fetchAllRowsForWindow(supabase, rpcName, {
+      p_client_id: clientId,
+      p_from: range.from,
+      p_to: range.to,
+    });
+  } catch (error) {
+    if (!isStatementTimeoutError(error)) throw error;
+    const days = enumerateDatesInclusive(range.from, range.to);
+    if (days.length <= 1) throw error;
+    const mid = Math.ceil(days.length / 2);
+    const [left, right] = await Promise.all([
+      fetchWindowResilient(supabase, rpcName, clientId, {
+        from: days[0],
+        to: days[mid - 1],
+      }),
+      fetchWindowResilient(supabase, rpcName, clientId, {
+        from: days[mid],
+        to: days[days.length - 1],
+      }),
+    ]);
+    return [...left, ...right];
+  }
+}
+
+const PFM_MATRIX_CHUNK_DAYS = 7;
+
+/** Product page x channel rows for a range, merged across date windows. */
+export async function fetchPfmProductChannelMatrixRange(
+  supabase,
+  { clientId, from, to }
+) {
+  const ranges = chunkDateRangesInclusive(from, to, PFM_MATRIX_CHUNK_DAYS);
+  const rows = [];
+  for (let i = 0; i < ranges.length; i += PFM_OVERVIEW_CHUNK_CONCURRENCY) {
+    const batch = ranges.slice(i, i + PFM_OVERVIEW_CHUNK_CONCURRENCY);
+    const results = await Promise.all(
+      batch.map((r) =>
+        fetchWindowResilient(supabase, 'get_pfm_product_channel_pages', clientId, r)
+      )
+    );
+    for (const data of results) rows.push(...data);
+  }
+
+  const byKey = new Map();
+  for (const r of rows) {
+    const pagePath = r.page_path || '(not set)';
+    const channel = String(r.channel_bucket ?? '(not set)');
+    const key = `${pagePath}\u0000${channel}`;
+    const prev = byKey.get(key) || {
+      page_path: pagePath,
+      page_title: '',
+      channel_bucket: channel,
+      views: 0,
+      total_users: 0,
+      new_users: 0,
+    };
+    if (!prev.page_title && r.page_title) prev.page_title = r.page_title;
+    prev.views += Number(r.views) || 0;
+    prev.total_users += Number(r.total_users) || 0;
+    prev.new_users += Number(r.new_users) || 0;
+    byKey.set(key, prev);
+  }
+  return [...byKey.values()];
 }
 
 function mergeTopProductRows(rows, limit) {

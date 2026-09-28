@@ -476,6 +476,54 @@
   color: var(--pfm-muted);
 }
 
+/* Dark scrollbars for tables / panels (match dashboard CSS, not OS default). */
+.vdp-root.pfm-dash .cmp-table-wrap,
+.vdp-root.pfm-dash .vdp-top-vehicles-scroll,
+.vdp-root.pfm-dash .vdp-table-scroll,
+.vdp-root.pfm-dash .vdp-chart-scroll {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(148, 163, 184, 0.45) rgba(10, 11, 13, 0.55);
+}
+
+.vdp-root.pfm-dash .cmp-table-wrap::-webkit-scrollbar,
+.vdp-root.pfm-dash .vdp-top-vehicles-scroll::-webkit-scrollbar,
+.vdp-root.pfm-dash .vdp-table-scroll::-webkit-scrollbar,
+.vdp-root.pfm-dash .vdp-chart-scroll::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+
+.vdp-root.pfm-dash .cmp-table-wrap::-webkit-scrollbar-track,
+.vdp-root.pfm-dash .vdp-top-vehicles-scroll::-webkit-scrollbar-track,
+.vdp-root.pfm-dash .vdp-table-scroll::-webkit-scrollbar-track,
+.vdp-root.pfm-dash .vdp-chart-scroll::-webkit-scrollbar-track {
+  background: rgba(10, 11, 13, 0.65);
+  border-radius: 8px;
+}
+
+.vdp-root.pfm-dash .cmp-table-wrap::-webkit-scrollbar-thumb,
+.vdp-root.pfm-dash .vdp-top-vehicles-scroll::-webkit-scrollbar-thumb,
+.vdp-root.pfm-dash .vdp-table-scroll::-webkit-scrollbar-thumb,
+.vdp-root.pfm-dash .vdp-chart-scroll::-webkit-scrollbar-thumb {
+  background: rgba(148, 163, 184, 0.4);
+  border-radius: 8px;
+  border: 1px solid rgba(10, 11, 13, 0.35);
+}
+
+.vdp-root.pfm-dash .cmp-table-wrap::-webkit-scrollbar-thumb:hover,
+.vdp-root.pfm-dash .vdp-top-vehicles-scroll::-webkit-scrollbar-thumb:hover,
+.vdp-root.pfm-dash .vdp-table-scroll::-webkit-scrollbar-thumb:hover,
+.vdp-root.pfm-dash .vdp-chart-scroll::-webkit-scrollbar-thumb:hover {
+  background: rgba(96, 165, 250, 0.55);
+}
+
+.vdp-root.pfm-dash .cmp-table-wrap::-webkit-scrollbar-corner,
+.vdp-root.pfm-dash .vdp-top-vehicles-scroll::-webkit-scrollbar-corner,
+.vdp-root.pfm-dash .vdp-table-scroll::-webkit-scrollbar-corner,
+.vdp-root.pfm-dash .vdp-chart-scroll::-webkit-scrollbar-corner {
+  background: rgba(10, 11, 13, 0.65);
+}
+
 .vdp-root.pfm-dash .cmp-table-wrap--scroll {
   max-height: 560px;
   overflow-y: auto;
@@ -518,6 +566,211 @@
 .vdp-root.pfm-dash .cmp-tbl--pages tfoot .cmp-tbl-total-row--plain td.col-prev {
   background:
     linear-gradient(rgba(148, 163, 184, 0.08), rgba(148, 163, 184, 0.08)),
+    var(--pfm-panel) !important;
+}
+
+/* Product vs Channel matrix */
+/* Two header rows + ~10 body rows + sticky total visible; rest scrolls. */
+.vdp-root.pfm-dash .cmp-table-wrap--rows-10 {
+  max-height: calc(64px + (10 * 41px) + 38px);
+}
+
+.vdp-root.pfm-dash .cmp-tbl--matrix tbody td {
+  height: 41px;
+  padding-top: 6px;
+  padding-bottom: 6px;
+}
+
+.vdp-root.pfm-dash .cmp-tbl--matrix .mx-cell {
+  display: inline-flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 5px;
+  white-space: nowrap;
+}
+
+/* Compare mode: one Period column holds the month labels; value cells line up with it. */
+.vdp-root.pfm-dash .cmp-tbl .mx-lines {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 4px;
+}
+
+.vdp-root.pfm-dash .cmp-tbl .mx-lines > span {
+  height: 18px;
+  line-height: 18px;
+  display: inline-flex;
+  align-items: center;
+}
+
+.vdp-root.pfm-dash .cmp-tbl .mx-period-cell .mx-lines {
+  align-items: flex-start;
+}
+
+.vdp-root.pfm-dash .cmp-tbl .mx-lbl {
+  text-align: left;
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--pfm-muted);
+  white-space: nowrap;
+}
+
+.vdp-root.pfm-dash .cmp-tbl .mx-val {
+  text-align: right;
+  font-size: 12.5px;
+  color: #cbd5e1;
+  white-space: nowrap;
+}
+
+.vdp-root.pfm-dash .cmp-tbl .mx-val--cur {
+  color: #fff;
+  font-weight: 700;
+}
+
+/* Stacked compare layout for page / channel tables */
+.vdp-root.pfm-dash .cmp-tbl--stacked .mx-period-col,
+.vdp-root.pfm-dash .cmp-tbl--stacked .mx-period-cell {
+  width: 92px;
+  min-width: 92px;
+  text-align: left !important;
+  border-right: 1px solid rgba(241, 245, 249, 0.14);
+}
+
+.vdp-root.pfm-dash .cmp-tbl--stacked tbody td,
+.vdp-root.pfm-dash .cmp-tbl--stacked tfoot td {
+  padding-top: 7px;
+  padding-bottom: 7px;
+  vertical-align: middle;
+}
+
+.vdp-root.pfm-dash .cmp-tbl--stacked th.right,
+.vdp-root.pfm-dash .cmp-tbl--stacked td.right {
+  text-align: right;
+}
+
+.vdp-root.pfm-dash .cmp-table-wrap--scroll:has(.cmp-tbl--stacked) {
+  max-height: 720px;
+}
+
+.vdp-root.pfm-dash .cmp-tbl .mx-val--delta {
+  font-size: 10.5px;
+}
+
+.vdp-root.pfm-dash .cmp-tbl--matrix--compare tbody td,
+.vdp-root.pfm-dash .cmp-tbl--matrix--compare tfoot td {
+  height: 70px;
+  padding-top: 6px;
+  padding-bottom: 6px;
+  vertical-align: middle;
+}
+
+.vdp-root.pfm-dash .cmp-table-wrap--rows-10:has(.cmp-tbl--matrix--compare) {
+  max-height: calc(64px + (10 * 70px) + 70px);
+}
+
+/* Rank, product and period columns stay pinned on the left while channels scroll. */
+.vdp-root.pfm-dash .cmp-tbl--matrix .cmp-rank-col,
+.vdp-root.pfm-dash .cmp-tbl--matrix .cmp-page-col,
+.vdp-root.pfm-dash .cmp-tbl--matrix .cmp-page-cell,
+.vdp-root.pfm-dash .cmp-tbl--matrix .mx-period-col,
+.vdp-root.pfm-dash .cmp-tbl--matrix .mx-period-cell {
+  position: sticky;
+  box-sizing: border-box;
+  z-index: 1;
+}
+
+.vdp-root.pfm-dash .cmp-tbl--matrix thead .cmp-rank-col,
+.vdp-root.pfm-dash .cmp-tbl--matrix thead .cmp-page-col,
+.vdp-root.pfm-dash .cmp-tbl--matrix thead .mx-period-col {
+  z-index: 3;
+}
+
+.vdp-root.pfm-dash .cmp-tbl--matrix .cmp-rank-col {
+  left: 0;
+  width: 40px;
+  min-width: 40px;
+  max-width: 40px;
+}
+
+.vdp-root.pfm-dash .cmp-tbl--matrix .cmp-page-col,
+.vdp-root.pfm-dash .cmp-tbl--matrix .cmp-page-cell {
+  left: 40px;
+  width: 230px;
+  min-width: 230px;
+  max-width: 230px;
+}
+
+.vdp-root.pfm-dash .cmp-tbl--matrix .mx-period-col,
+.vdp-root.pfm-dash .cmp-tbl--matrix .mx-period-cell {
+  left: 270px;
+  width: 92px;
+  min-width: 92px;
+  max-width: 92px;
+  text-align: left !important;
+  border-right: 1px solid rgba(241, 245, 249, 0.14);
+}
+
+.vdp-root.pfm-dash .cmp-tbl--matrix tbody tr:nth-child(n) td.cmp-rank-col,
+.vdp-root.pfm-dash .cmp-tbl--matrix tbody tr:nth-child(n) td.cmp-page-cell,
+.vdp-root.pfm-dash .cmp-tbl--matrix tbody tr:nth-child(n) td.mx-period-cell,
+.vdp-root.pfm-dash .cmp-tbl--matrix tfoot tr td.cmp-rank-col,
+.vdp-root.pfm-dash .cmp-tbl--matrix tfoot tr td.cmp-page-cell,
+.vdp-root.pfm-dash .cmp-tbl--matrix tfoot tr td.mx-period-cell {
+  background: var(--pfm-panel) !important;
+}
+
+.vdp-root.pfm-dash .cmp-tbl--matrix td.cmp-page-cell > a {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.vdp-root.pfm-dash .cmp-tbl--matrix thead th {
+  font-size: 10px;
+  white-space: nowrap;
+}
+
+.vdp-root.pfm-dash .cmp-tbl--matrix th.mx-grp-head {
+  text-align: center;
+  font-size: 11px;
+  color: #e2e8f0 !important;
+  border-bottom: 1px solid rgba(241, 245, 249, 0.12);
+}
+
+.vdp-root.pfm-dash .cmp-tbl--matrix .mx-grp-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  margin-right: 6px;
+  vertical-align: middle;
+}
+
+.vdp-root.pfm-dash .cmp-tbl--matrix td.mx-grp-start,
+.vdp-root.pfm-dash .cmp-tbl--matrix th.mx-grp-start {
+  border-left: 1px solid rgba(241, 245, 249, 0.1);
+}
+
+.vdp-root.pfm-dash .cmp-tbl--matrix td {
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.vdp-root.pfm-dash .cmp-tbl--matrix td.cmp-page-cell {
+  white-space: normal;
+}
+
+.vdp-root.pfm-dash .cmp-tbl--matrix tbody tr:nth-child(n) td.mx-grp-alt {
+  background: rgba(59, 130, 246, 0.07) !important;
+}
+
+.vdp-root.pfm-dash .cmp-tbl--matrix thead th.mx-grp-alt,
+.vdp-root.pfm-dash .cmp-tbl--matrix tfoot tr td.mx-grp-alt {
+  background:
+    linear-gradient(rgba(59, 130, 246, 0.07), rgba(59, 130, 246, 0.07)),
     var(--pfm-panel) !important;
 }
 

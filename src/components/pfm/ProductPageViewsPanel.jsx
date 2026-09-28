@@ -1,7 +1,10 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { fetchPfmProductOverview } from '@/lib/api/pfmProductOverview';
+import {
+  fetchPfmProductChannelMatrix,
+  fetchPfmProductOverview,
+} from '@/lib/api/pfmProductOverview';
 import { enumerateDatesInclusive } from '@/lib/ga4/dateRange';
 import { colorForChannel } from '@/lib/ga4/channelDisplay';
 import {
@@ -13,7 +16,12 @@ import VdpChart from '@/components/vdp/VdpChart';
 import { Card, Kpi, Seg, Toolbar, ToolbarGroup } from '@/components/vdp/VdpUi';
 import { VdpLoadingCard } from '@/components/vdp/VdpLoadingBanner';
 import { useSoftLoadPercent } from '@/components/vdp/useSoftLoadPercent';
-import { ChannelCompareTable, PageCompareTable } from '@/components/pfm/PfmCompareTables';
+import {
+  // ChannelCompareTable,
+  PageCompareTable,
+  ProductChannelMatrixTable,
+  shortMonthLabel,
+} from '@/components/pfm/PfmCompareTables';
 
 const PRODUCT_METRIC_KEYS = [
   'views',
@@ -159,6 +167,21 @@ function TopProductsLabelSelect({ value, onChange }) {
   );
 }
 
+function MatrixChannelSelect({ value, onChange }) {
+  return (
+    <select
+      className="vdp-top-vehicles-select"
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      aria-label="Channels shown"
+    >
+      <option value="3">Top 3 channels</option>
+      <option value="5">Top 5 channels</option>
+      <option value="all">All channels</option>
+    </select>
+  );
+}
+
 
 export default function ProductPageViewsPanel({
   from,
@@ -175,6 +198,11 @@ export default function ProductPageViewsPanel({
   const [error, setError] = useState(null);
   const [topMode, setTopMode] = useState('5');
   const [labelMode, setLabelMode] = useState('title');
+  const [matrix, setMatrix] = useState(null);
+  const [matrixLoading, setMatrixLoading] = useState(false);
+  const [matrixError, setMatrixError] = useState(null);
+  const [matrixChannels, setMatrixChannels] = useState('3');
+  const [matrixLabelMode, setMatrixLabelMode] = useState('title');
   const cancelRef = useRef(false);
   const genRef = useRef(0);
 
@@ -224,6 +252,35 @@ export default function ProductPageViewsPanel({
       cancelRef.current = true;
     };
   }, [load]);
+
+  useEffect(() => {
+    if (!from || !to) {
+      setMatrix(null);
+      return undefined;
+    }
+    const ctrl = new AbortController();
+    setMatrixLoading(true);
+    setMatrixError(null);
+    fetchPfmProductChannelMatrix({
+      from,
+      to,
+      priorFrom,
+      priorTo,
+      signal: ctrl.signal,
+    })
+      .then((json) =>
+        setMatrix({ rows: json?.rows || [], rowsPrior: json?.rowsPrior || [] })
+      )
+      .catch((err) => {
+        if (err?.name === 'AbortError') return;
+        setMatrixError(err?.message || 'Failed to load product vs channel data.');
+        setMatrix(null);
+      })
+      .finally(() => {
+        if (!ctrl.signal.aborted) setMatrixLoading(false);
+      });
+    return () => ctrl.abort();
+  }, [from, to, priorFrom, priorTo]);
 
   const loadPercent = useSoftLoadPercent(loading);
 
@@ -402,6 +459,8 @@ export default function ProductPageViewsPanel({
   const displayProducts =
     topMode === 'all' ? allProducts : allProducts.slice(0, 5);
   const tableCompare = compareActive && showCompare;
+  const curShort = shortMonthLabel(from, to);
+  const priShort = shortMonthLabel(priorFrom, priorTo);
   const topTitle =
     topMode === 'all'
       ? 'All Products by Views'
@@ -629,6 +688,8 @@ export default function ProductPageViewsPanel({
         metricKeys={PRODUCT_METRIC_KEYS}
         curLabel={curLabel}
         priLabel={priLabel}
+        curShort={curShort}
+        priShort={priShort}
         compareActive={tableCompare}
         comparePctLabel={comparePctLabel}
         labelMode={labelMode}
@@ -637,6 +698,49 @@ export default function ProductPageViewsPanel({
         emptyText="No product page data for this period."
       />
 
+      {matrixError ? (
+        <div
+          className="vdp-card vdp-alert-error"
+          style={{ marginBottom: 16, fontSize: 13 }}
+        >
+          {matrixError}
+        </div>
+      ) : null}
+
+      <ProductChannelMatrixTable
+        title="Product vs Channel — All Products"
+        sub={
+          tableCompare
+            ? `${curLabel} vs ${priLabel} · ${comparePctLabel} · split by GA4 channel`
+            : `${curLabel} · product page views and users split by GA4 channel`
+        }
+        actions={
+          <div className="vdp-top-products-actions">
+            <TopProductsLabelSelect
+              value={matrixLabelMode}
+              onChange={setMatrixLabelMode}
+            />
+            <MatrixChannelSelect
+              value={matrixChannels}
+              onChange={setMatrixChannels}
+            />
+          </div>
+        }
+        rows={matrix?.rows || []}
+        priRows={matrix?.rowsPrior || []}
+        compareActive={tableCompare}
+        curLabel={curLabel}
+        priLabel={priLabel}
+        curShort={curShort}
+        priShort={priShort}
+        comparePctLabel={comparePctLabel}
+        productLimit="all"
+        channelLimit={matrixChannels === 'all' ? 'all' : Number(matrixChannels)}
+        labelMode={matrixLabelMode}
+        loading={matrixLoading}
+      />
+
+      {/* Product Views by Channel — Period Comparison — hidden for now
       <ChannelCompareTable
         title="Product Views by Channel"
         rows={data?.channelsCurrent || []}
@@ -644,11 +748,14 @@ export default function ProductPageViewsPanel({
         metricKeys={PRODUCT_METRIC_KEYS}
         curLabel={curLabel}
         priLabel={priLabel}
+        curShort={curShort}
+        priShort={priShort}
         compareActive={tableCompare}
         comparePctLabel={comparePctLabel}
         loading={loading}
         emptyText="No product channel data for this period."
       />
+      */}
     </div>
   );
 }

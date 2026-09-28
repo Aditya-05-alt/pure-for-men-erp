@@ -67,15 +67,45 @@ function fmtDelta(n) {
   return `${n >= 0 ? '+' : ''}${n}%`;
 }
 
-function MetricCompareCells({ cur, pri, delta }) {
+/** "SEP 2026", or "JUN–SEP 2026" / "DEC 2025–JAN 2026" for multi-month ranges. */
+export function shortMonthLabel(fromIso, toIso) {
+  if (!fromIso || !toIso) return '';
+  const part = (iso, withYear) => {
+    const d = new Date(`${String(iso).slice(0, 10)}T12:00:00`);
+    const m = d.toLocaleDateString('en-US', { month: 'short' }).toUpperCase();
+    return withYear ? `${m} ${d.getFullYear()}` : m;
+  };
+  if (String(fromIso).slice(0, 7) === String(toIso).slice(0, 7)) {
+    return part(fromIso, true);
+  }
+  const sameYear = String(fromIso).slice(0, 4) === String(toIso).slice(0, 4);
+  return `${part(fromIso, !sameYear)}–${part(toIso, true)}`;
+}
+
+/** Month labels shown once per row; value cells stack the same three lines. */
+function PeriodCell({ curShort, priShort, comparePctLabel }) {
   return (
-    <>
-      <td className="col-cur mono">{fmt(cur)}</td>
-      <td className="col-prev mono">{fmt(pri)}</td>
-      <td className="col-mom">
-        <Delta value={delta} />
-      </td>
-    </>
+    <td className="mx-period-cell">
+      <div className="mx-lines">
+        <span className="mx-lbl">{curShort}</span>
+        <span className="mx-lbl">{priShort}</span>
+        <span className="mx-lbl">{comparePctLabel}</span>
+      </div>
+    </td>
+  );
+}
+
+function StackedValueCell({ cur, pri, delta, className = 'right mono', title }) {
+  return (
+    <td className={className} title={title}>
+      <div className="mx-lines">
+        <span className="mx-val mx-val--cur">{fmt(cur)}</span>
+        <span className="mx-val">{fmt(pri)}</span>
+        <span className="mx-val mx-val--delta">
+          <Delta value={delta ?? pctChange(cur, pri)} />
+        </span>
+      </div>
+    </td>
   );
 }
 
@@ -176,37 +206,28 @@ function CompareHead({
   return (
     <thead>
       <tr>
-        {firstCols.map((c) => firstTh(c, { rowSpan: 2 }))}
+        {firstCols.map((c) => firstTh(c))}
+        <th className="mx-period-col">Period</th>
         {metricKeys.map((k) => (
-          <th key={k} className="center" colSpan={3}>
+          <SortTh key={k} col={`${k}:cur`} sort={sort} onSort={onSort} className="right">
             {METRIC_LABELS[k]}
-          </th>
-        ))}
-      </tr>
-      <tr>
-        {metricKeys.map((k) => (
-          <Fragment key={k}>
-            <SortTh col={`${k}:cur`} sort={sort} onSort={onSort} className="col-cur">
-              {curLabel}
-            </SortTh>
-            <SortTh col={`${k}:pri`} sort={sort} onSort={onSort} className="col-prev">
-              {priLabel}
-            </SortTh>
-            <SortTh col={`${k}:delta`} sort={sort} onSort={onSort} className="col-mom">
-              {comparePctLabel}
-            </SortTh>
-          </Fragment>
+          </SortTh>
         ))}
       </tr>
     </thead>
   );
 }
 
-function MetricCells({ metricKeys, compareActive, cur, pri, delta }) {
+function MetricCells({ metricKeys, compareActive, cur, pri, delta, periodProps }) {
   if (compareActive) {
-    return metricKeys.map((k) => (
-      <MetricCompareCells key={k} cur={cur[k]} pri={pri[k]} delta={delta[k]} />
-    ));
+    return (
+      <>
+        <PeriodCell {...periodProps} />
+        {metricKeys.map((k) => (
+          <StackedValueCell key={k} cur={cur[k]} pri={pri[k]} delta={delta[k]} />
+        ))}
+      </>
+    );
   }
   return metricKeys.map((k) => (
     <td key={k} className="right mono">
@@ -273,25 +294,8 @@ function PanelHead({ title, sub, actions, compareActive, copied, onCopy, loading
   );
 }
 
-function PanelFoot({ compareActive, curLabel, priLabel, comparePctLabel }) {
-  if (!compareActive) return null;
-  return (
-    <div className="vdp-cmp-foot">
-      <div className="vdp-cmp-legend">
-        <span className="leg-cur" /> {curLabel}
-        <span className="leg-prev" /> {priLabel}
-      </div>
-      <div className="vdp-cmp-note">
-        {comparePctLabel}: {curLabel} vs {priLabel}
-      </div>
-    </div>
-  );
-}
-
 function tableClass(extra, compareActive) {
-  return `cmp-tbl ${extra}${
-    compareActive ? ' cmp-tbl--period-compare cmp-tbl--multi-metric' : ''
-  }`;
+  return `cmp-tbl ${extra}${compareActive ? ' cmp-tbl--stacked' : ''}`;
 }
 
 /** Channel rows keyed by `channel_bucket`, cur/prior/Δ per metric when comparing. */
@@ -302,6 +306,8 @@ export function ChannelCompareTable({
   metricKeys,
   curLabel,
   priLabel,
+  curShort,
+  priShort,
   compareActive,
   comparePctLabel = 'MoM',
   loading,
@@ -367,7 +373,12 @@ export function ChannelCompareTable({
   );
   const [copied, onCopy] = useCopy(buildLines);
 
-  const colCount = 1 + metricKeys.length * (compareActive ? 3 : 1);
+  const colCount = 1 + (compareActive ? 1 : 0) + metricKeys.length;
+  const periodProps = {
+    curShort: curShort || curLabel,
+    priShort: priShort || priLabel,
+    comparePctLabel,
+  };
 
   return (
     <div className="vdp-card vdp-cmp-panel" style={{ marginTop: 16, ...style }}>
@@ -422,6 +433,7 @@ export function ChannelCompareTable({
                     cur={r.cur}
                     pri={r.pri}
                     delta={r.delta}
+                    periodProps={periodProps}
                   />
                 </tr>
               ))
@@ -435,18 +447,338 @@ export function ChannelCompareTable({
                   cur={totals.cur}
                   pri={totals.pri}
                   delta={totals.delta}
+                  periodProps={periodProps}
                 />
               </tr>
             ) : null}
           </tbody>
         </table>
       </div>
-      <PanelFoot
-        compareActive={compareActive}
-        curLabel={curLabel}
-        priLabel={priLabel}
-        comparePctLabel={comparePctLabel}
+    </div>
+  );
+}
+
+const MATRIX_METRIC_KEYS = ['views', 'newUsers', 'totalUsers', 'returningUsers'];
+const OTHER_CHANNELS = 'Other';
+
+/**
+ * Product rows x channel column groups; each group has Views / New / Total /
+ * Returning users. Channels beyond `channelLimit` roll into "Other" so each
+ * row still sums to the product's total.
+ */
+export function ProductChannelMatrixTable({
+  title,
+  sub,
+  actions,
+  rows,
+  priRows,
+  compareActive = false,
+  curLabel,
+  priLabel,
+  curShort,
+  priShort,
+  comparePctLabel = 'MoM',
+  productLimit = 5,
+  channelLimit = 3,
+  labelMode = 'title',
+  loading,
+  emptyText = 'No product channel data for this period.',
+  style,
+}) {
+  const { groups, productRows } = useMemo(() => {
+    const channelViews = new Map();
+    for (const r of rows || []) {
+      channelViews.set(r.channel, (channelViews.get(r.channel) || 0) + (Number(r.views) || 0));
+    }
+    const channels = [...channelViews.entries()]
+      .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+      .map(([ch]) => ch);
+    const shown = channelLimit === 'all' ? channels : channels.slice(0, channelLimit);
+    const hasOther = shown.length < channels.length;
+    const groupNames = hasOther ? [...shown, OTHER_CHANNELS] : shown;
+    const groupIndex = new Map(shown.map((ch, i) => [ch, i]));
+
+    const byPath = new Map();
+    for (const r of rows || []) {
+      let p = byPath.get(r.pagePath);
+      if (!p) {
+        p = {
+          pagePath: r.pagePath,
+          pageTitle: r.pageTitle,
+          groups: groupNames.map(() => emptyMetrics()),
+          totalViews: 0,
+        };
+        byPath.set(r.pagePath, p);
+      }
+      if (!p.pageTitle && r.pageTitle) p.pageTitle = r.pageTitle;
+      const gi = groupIndex.has(r.channel) ? groupIndex.get(r.channel) : groupNames.length - 1;
+      const m = metricsFromRow(r);
+      addMetrics(p.groups[gi], m);
+      p.totalViews += m.views;
+    }
+    for (const p of byPath.values()) {
+      for (const g of p.groups) g.returningUsers = returningUsers(g.totalUsers, g.newUsers);
+    }
+
+    const priByPath = new Map();
+    if (compareActive) {
+      const otherIdx = hasOther ? groupNames.length - 1 : -1;
+      for (const r of priRows || []) {
+        const gi = groupIndex.has(r.channel) ? groupIndex.get(r.channel) : otherIdx;
+        if (gi < 0) continue;
+        let groupsPri = priByPath.get(r.pagePath);
+        if (!groupsPri) {
+          groupsPri = groupNames.map(() => emptyMetrics());
+          priByPath.set(r.pagePath, groupsPri);
+        }
+        addMetrics(groupsPri[gi], metricsFromRow(r));
+      }
+      for (const groupsPri of priByPath.values()) {
+        for (const g of groupsPri) g.returningUsers = returningUsers(g.totalUsers, g.newUsers);
+      }
+    }
+
+    const sorted = [...byPath.values()].sort(
+      (a, b) => b.totalViews - a.totalViews || a.pagePath.localeCompare(b.pagePath)
+    );
+    const limited = productLimit === 'all' ? sorted : sorted.slice(0, productLimit);
+    return {
+      groups: groupNames.map((name, i) => ({
+        key: `g${i}`,
+        priKey: `p${i}`,
+        name,
+        color: name === OTHER_CHANNELS ? '#64748b' : colorForChannel(name, i),
+      })),
+      productRows: limited.map((p, i) => {
+        const row = { rank: i + 1, pagePath: p.pagePath, pageTitle: p.pageTitle };
+        const pri = priByPath.get(p.pagePath);
+        p.groups.forEach((g, gi) => {
+          row[`g${gi}`] = g;
+          row[`p${gi}`] = pri?.[gi] || emptyMetrics();
+        });
+        return row;
+      }),
+    };
+  }, [rows, priRows, compareActive, productLimit, channelLimit]);
+
+  const totals = useMemo(() => {
+    const out = {};
+    for (const g of groups) {
+      const t = emptyMetrics();
+      const tp = emptyMetrics();
+      for (const r of productRows) {
+        addMetrics(t, r[g.key]);
+        addMetrics(tp, r[g.priKey]);
+      }
+      t.returningUsers = returningUsers(t.totalUsers, t.newUsers);
+      tp.returningUsers = returningUsers(tp.totalUsers, tp.newUsers);
+      out[g.key] = t;
+      out[g.priKey] = tp;
+    }
+    return out;
+  }, [groups, productRows]);
+
+  const labelOf = useCallback(
+    (r) =>
+      labelMode === 'url' ? r.pagePath : String(r.pageTitle || '').trim() || r.pagePath,
+    [labelMode]
+  );
+
+  const [sort, onSort] = useTableSort();
+  const sortedRows = useMemo(() => {
+    if (sort?.col === 'rank') {
+      return sort.dir === 'asc' ? productRows : [...productRows].reverse();
+    }
+    return sortRows(productRows, sort, labelOf);
+  }, [productRows, sort, labelOf]);
+
+  const buildLines = useCallback(() => {
+    const header = [
+      '#',
+      labelMode === 'url' ? 'URL' : 'Product',
+      ...groups.flatMap((g) =>
+        MATRIX_METRIC_KEYS.flatMap((k) =>
+          compareActive
+            ? [
+                `${g.name} ${METRIC_LABELS[k]} ${curLabel}`,
+                `${g.name} ${METRIC_LABELS[k]} ${priLabel}`,
+                `${g.name} ${METRIC_LABELS[k]} ${comparePctLabel}`,
+              ]
+            : [`${g.name} ${METRIC_LABELS[k]}`]
+        )
+      ),
+    ];
+    const vals = (r) =>
+      groups.flatMap((g) =>
+        MATRIX_METRIC_KEYS.flatMap((k) =>
+          compareActive
+            ? [
+                r[g.key][k],
+                r[g.priKey][k],
+                fmtDelta(pctChange(r[g.key][k], r[g.priKey][k])),
+              ]
+            : [r[g.key][k]]
+        )
+      );
+    const lines = [header.join('\t')];
+    sortedRows.forEach((r) => lines.push([r.rank, labelOf(r), ...vals(r)].join('\t')));
+    lines.push(['', 'Total', ...vals(totals)].join('\t'));
+    return lines;
+  }, [groups, sortedRows, totals, labelMode, labelOf, compareActive, curLabel, priLabel, comparePctLabel]);
+  const [copied, onCopy] = useCopy(buildLines);
+
+  const colCount = 2 + (compareActive ? 1 : 0) + groups.length * MATRIX_METRIC_KEYS.length;
+  const periodCell = compareActive ? (
+    <PeriodCell
+      curShort={curShort || curLabel}
+      priShort={priShort || priLabel}
+      comparePctLabel={comparePctLabel}
+    />
+  ) : null;
+  const groupCellClass = (gi, k) =>
+    `right mono${gi % 2 ? ' mx-grp-alt' : ''}${k === MATRIX_METRIC_KEYS[0] ? ' mx-grp-start' : ''}`;
+  const renderCell = (src, g, gi, k) => {
+    const cur = src[g.key][k];
+    if (!compareActive) {
+      return (
+        <td key={`${g.key}-${k}`} className={groupCellClass(gi, k)}>
+          {fmt(cur)}
+        </td>
+      );
+    }
+    const pri = src[g.priKey][k];
+    return (
+      <StackedValueCell
+        key={`${g.key}-${k}`}
+        cur={cur}
+        pri={pri}
+        className={groupCellClass(gi, k)}
+        title={`${curLabel}: ${fmt(cur)}\n${priLabel}: ${fmt(pri)}`}
       />
+    );
+  };
+
+  return (
+    <div className="vdp-card vdp-cmp-panel" style={{ marginBottom: 16, ...style }}>
+      <PanelHead
+        title={title}
+        sub={sub}
+        actions={actions}
+        copied={copied}
+        onCopy={onCopy}
+        loading={loading}
+      />
+      <div
+        className={`cmp-table-wrap cmp-table-wrap--pages${
+          productLimit === 'all' ? ' cmp-table-wrap--scroll cmp-table-wrap--rows-10' : ''
+        }`}
+      >
+        <table
+          className={`cmp-tbl cmp-tbl--pages cmp-tbl--matrix${
+            compareActive ? ' cmp-tbl--matrix--compare' : ''
+          }`}
+        >
+          <thead>
+            <tr>
+              <SortTh col="rank" textCol sort={sort} onSort={onSort} rowSpan={2} className="cmp-rank-col">
+                #
+              </SortTh>
+              <SortTh col="label" textCol sort={sort} onSort={onSort} rowSpan={2} className="cmp-page-col">
+                {labelMode === 'url' ? 'URL' : 'Product'}
+              </SortTh>
+              {compareActive ? (
+                <th rowSpan={2} className="mx-period-col">
+                  Period
+                </th>
+              ) : null}
+              {groups.map((g, gi) => (
+                <th
+                  key={g.key}
+                  colSpan={MATRIX_METRIC_KEYS.length}
+                  className={`center mx-grp-head mx-grp-start${gi % 2 ? ' mx-grp-alt' : ''}`}
+                >
+                  <span className="cmp-channel-dot mx-grp-dot" style={{ background: g.color }} />
+                  {g.name}
+                </th>
+              ))}
+            </tr>
+            <tr>
+              {groups.map((g, gi) => (
+                <Fragment key={g.key}>
+                  {MATRIX_METRIC_KEYS.map((k) => (
+                    <SortTh
+                      key={k}
+                      col={`${k}:${g.key}`}
+                      sort={sort}
+                      onSort={onSort}
+                      className={groupCellClass(gi, k)}
+                    >
+                      {METRIC_LABELS[k]}
+                    </SortTh>
+                  ))}
+                </Fragment>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {loading && sortedRows.length === 0 ? (
+              <tr>
+                <td colSpan={colCount} className="cmp-table-loading">
+                  Loading product vs channel data…
+                </td>
+              </tr>
+            ) : sortedRows.length === 0 ? (
+              <tr>
+                <td colSpan={colCount} className="cmp-table-loading">
+                  {emptyText}
+                </td>
+              </tr>
+            ) : (
+              sortedRows.map((r) => {
+                const href = pfmPageHref(r.pagePath);
+                const titleText = String(r.pageTitle || '').trim() || r.pagePath;
+                const primary = labelMode === 'url' ? r.pagePath : titleText;
+                return (
+                  <tr key={r.pagePath}>
+                    <td className="cmp-rank-col mono">{r.rank}</td>
+                    <td className="cmp-page-cell">
+                      {href ? (
+                        <a
+                          href={href}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          className="vdp-product-url"
+                          title={`${titleText}\n${href}`}
+                        >
+                          {primary}
+                        </a>
+                      ) : (
+                        primary
+                      )}
+                    </td>
+                    {periodCell}
+                    {groups.map((g, gi) =>
+                      MATRIX_METRIC_KEYS.map((k) => renderCell(r, g, gi, k))
+                    )}
+                  </tr>
+                );
+              })
+            )}
+          </tbody>
+          {!loading && sortedRows.length > 0 ? (
+            <tfoot>
+              <tr className="cmp-tbl-total-row cmp-tbl-total-row--plain">
+                <td className="cmp-rank-col" />
+                <td className="cmp-page-cell">Total</td>
+                {periodCell}
+                {groups.map((g, gi) =>
+                  MATRIX_METRIC_KEYS.map((k) => renderCell(totals, g, gi, k))
+                )}
+              </tr>
+            </tfoot>
+          ) : null}
+        </table>
+      </div>
     </div>
   );
 }
@@ -464,6 +796,8 @@ export function PageCompareTable({
   metricKeys,
   curLabel,
   priLabel,
+  curShort,
+  priShort,
   compareActive,
   comparePctLabel = 'MoM',
   labelMode = 'title',
@@ -533,7 +867,12 @@ export function PageCompareTable({
   );
   const [copied, onCopy] = useCopy(buildLines);
 
-  const colCount = 2 + metricKeys.length * (compareActive ? 3 : 1);
+  const colCount = 2 + (compareActive ? 1 : 0) + metricKeys.length;
+  const periodProps = {
+    curShort: curShort || curLabel,
+    priShort: priShort || priLabel,
+    comparePctLabel,
+  };
 
   return (
     <div className="vdp-card vdp-cmp-panel" style={{ marginBottom: 16, ...style }}>
@@ -605,6 +944,7 @@ export function PageCompareTable({
                       cur={r.cur}
                       pri={r.pri}
                       delta={r.delta}
+                      periodProps={periodProps}
                     />
                   </tr>
                 );
@@ -622,18 +962,13 @@ export function PageCompareTable({
                   cur={totals.cur}
                   pri={totals.pri}
                   delta={totals.delta}
+                  periodProps={periodProps}
                 />
               </tr>
             </tfoot>
           ) : null}
         </table>
       </div>
-      <PanelFoot
-        compareActive={compareActive}
-        curLabel={curLabel}
-        priLabel={priLabel}
-        comparePctLabel={comparePctLabel}
-      />
     </div>
   );
 }

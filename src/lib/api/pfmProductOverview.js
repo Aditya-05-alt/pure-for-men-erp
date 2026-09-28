@@ -27,3 +27,27 @@ export async function fetchPfmProductOverview({
   }
   return json;
 }
+
+/** Product page x channel rows for the current and (optional) prior period. */
+export async function fetchPfmProductChannelMatrix({
+  from,
+  to,
+  priorFrom,
+  priorTo,
+  clientId = '001',
+  signal,
+}) {
+  const qs = new URLSearchParams({ from, to, clientId });
+  if (priorFrom && priorTo) {
+    qs.set('priorFrom', priorFrom);
+    qs.set('priorTo', priorTo);
+  }
+  const res = await fetch(`/api/pfm/product-channel-matrix?${qs}`, { signal });
+  const json = await res.json().catch(() => ({}));
+  if (!res.ok) {
+    throw new Error(
+      json?.error || `Product vs channel request failed (${res.status})`
+    );
+  }
+  return json;
+}
